@@ -1,6 +1,6 @@
 import { Principal } from "@icp-sdk/core/principal";
 import { useQueryClient } from "@tanstack/react-query";
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, Radio } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ConversationId } from "../backend";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
@@ -9,6 +9,8 @@ import {
   useGetCallerUserProfile,
   useUpdateLastSeen,
 } from "../hooks/useQueries";
+import type { ChannelId } from "../hooks/useQueries";
+import ChannelView from "./ChannelView";
 import ChatView from "./ChatView";
 import Sidebar from "./Sidebar";
 import UserProfileModal from "./UserProfileModal";
@@ -22,6 +24,9 @@ export default function MainLayout() {
   const queryClient = useQueryClient();
   const [activeConversationId, setActiveConversationId] =
     useState<ConversationId | null>(null);
+  const [activeChannelId, setActiveChannelId] = useState<ChannelId | null>(
+    null,
+  );
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [profileModalUserId, setProfileModalUserId] = useState<string | null>(
     null,
@@ -38,6 +43,13 @@ export default function MainLayout() {
 
   const handleSelectConversation = (id: ConversationId) => {
     setActiveConversationId(id);
+    setActiveChannelId(null);
+    setShowMobileChat(true);
+  };
+
+  const handleSelectChannel = (id: ChannelId) => {
+    setActiveChannelId(id);
+    setActiveConversationId(null);
     setShowMobileChat(true);
   };
 
@@ -64,6 +76,55 @@ export default function MainLayout() {
     }
   };
 
+  const mainContent = () => {
+    if (activeChannelId !== null) {
+      return (
+        <ChannelView
+          channelId={activeChannelId}
+          currentUserId={currentUserId}
+          onBack={handleBackToList}
+        />
+      );
+    }
+    if (activeConversationId !== null) {
+      return (
+        <ChatView
+          conversationId={activeConversationId}
+          currentUserId={currentUserId}
+          onBack={handleBackToList}
+          onOpenUserProfile={handleOpenUserProfile}
+        />
+      );
+    }
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-8">
+        <div className="flex flex-col items-center gap-6">
+          <div
+            className="w-20 h-20 rounded-2xl flex items-center justify-center opacity-30"
+            style={{
+              background:
+                "linear-gradient(135deg, oklch(0.76 0.13 72), oklch(0.65 0.11 65))",
+            }}
+          >
+            <MessageCircle className="w-10 h-10 text-primary-foreground" />
+          </div>
+          <div>
+            <h2 className="font-display text-2xl font-semibold text-foreground/40">
+              Select a conversation
+            </h2>
+            <p className="text-muted-foreground text-sm mt-1">
+              Choose from your chats, stories, or channels
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground/40">
+            <Radio className="h-4 w-4" />
+            <span>Channels tab — browse & follow broadcaster channels</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="h-[100dvh] w-screen flex bg-background overflow-hidden">
       {/* Sidebar */}
@@ -77,45 +138,19 @@ export default function MainLayout() {
           currentProfile={profile ?? null}
           activeConversationId={activeConversationId}
           onSelectConversation={handleSelectConversation}
+          onSelectChannel={handleSelectChannel}
           onStartChat={handleStartChatFromProfile}
           onLogout={handleLogout}
         />
       </div>
 
-      {/* Chat Area */}
+      {/* Main area */}
       <div
         className={`${
           showMobileChat ? "flex" : "hidden"
         } md:flex flex-col flex-1 min-w-0 min-h-0`}
       >
-        {activeConversationId ? (
-          <ChatView
-            conversationId={activeConversationId}
-            currentUserId={currentUserId}
-            onBack={handleBackToList}
-            onOpenUserProfile={handleOpenUserProfile}
-          />
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-8">
-            <div
-              className="w-20 h-20 rounded-2xl flex items-center justify-center opacity-30"
-              style={{
-                background:
-                  "linear-gradient(135deg, oklch(0.76 0.13 72), oklch(0.65 0.11 65))",
-              }}
-            >
-              <MessageCircle className="w-10 h-10 text-primary-foreground" />
-            </div>
-            <div>
-              <h2 className="font-display text-2xl font-semibold text-foreground/40">
-                Select a conversation
-              </h2>
-              <p className="text-muted-foreground text-sm mt-1">
-                Choose from your chats or start a new one
-              </p>
-            </div>
-          </div>
-        )}
+        {mainContent()}
       </div>
 
       {/* Global user profile modal */}

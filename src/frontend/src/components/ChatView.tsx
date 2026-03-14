@@ -120,6 +120,7 @@ function MediaMessage({ url, mediaType, onImageClick }: MediaMessageProps) {
       <video
         src={url}
         controls
+        muted
         playsInline
         className="max-w-[240px] max-h-[240px] rounded-lg mt-1"
         style={{ display: "block" }}

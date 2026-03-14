@@ -7,6 +7,13 @@ export interface None {
     __kind__: "None";
 }
 export type Option<T> = Some<T> | None;
+export type ConversationType = {
+    __kind__: "group";
+    group: string;
+} | {
+    __kind__: "direct";
+    direct: null;
+};
 export interface Conversation {
     id: ConversationId;
     lastMessageTimestamp: bigint;
@@ -15,6 +22,7 @@ export interface Conversation {
     type: ConversationType;
 }
 export type Timestamp = bigint;
+export type CommentId = bigint;
 export interface StatusContent {
     text: string;
     mediaUrl?: string;
@@ -26,10 +34,20 @@ export interface MessageContent {
     mediaType?: MediaType;
 }
 export type StatusId = bigint;
-export type CommentId = bigint;
 export type ConversationId = bigint;
 export type UserId = Principal;
+export interface StatusInteractions {
+    likeCount: bigint;
+    comments: Array<StatusCommentWithProfile>;
+    likedByMe: boolean;
+}
 export type MessageId = bigint;
+export interface StatusCommentWithProfile {
+    id: CommentId;
+    text: string;
+    author: UserProfile;
+    timestamp: Timestamp;
+}
 export interface Message {
     id: MessageId;
     content: MessageContent;
@@ -37,13 +55,6 @@ export interface Message {
     sender: UserId;
     timestamp: Timestamp;
 }
-export type ConversationType = {
-    __kind__: "group";
-    group: string;
-} | {
-    __kind__: "direct";
-    direct: null;
-};
 export interface MessageReadReceipt {
     userId: UserId;
     timestamp: Timestamp;
@@ -80,17 +91,6 @@ export interface UserProfile {
     avatarUrl?: string;
     lastSeen: Timestamp;
 }
-export interface StatusCommentWithProfile {
-    id: CommentId;
-    author: UserProfile;
-    text: string;
-    timestamp: Timestamp;
-}
-export interface StatusInteractions {
-    likeCount: bigint;
-    likedByMe: boolean;
-    comments: Array<StatusCommentWithProfile>;
-}
 export enum UserRole {
     admin = "admin",
     user = "user",
@@ -102,19 +102,26 @@ export interface backendInterface {
     commentOnStatus(statusId: StatusId, text: string): Promise<CommentId>;
     createDirectConversation(otherUser: UserId): Promise<ConversationId>;
     createGroupConversation(name: string, members: Array<UserId>): Promise<ConversationId>;
+    deleteGroupName(conversationId: ConversationId): Promise<void>;
+    getAllStories(): Promise<Array<[UserProfile, Array<Status>]>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getContactStatuses(): Promise<Array<[UserProfile, Array<Status>]>>;
     getConversation(conversationId: ConversationId): Promise<Conversation | null>;
     getMessageReadReceipts(conversationId: ConversationId, messageId: MessageId): Promise<Array<MessageReadReceipt> | null>;
+    getMessages(conversationId: ConversationId, offset: bigint, limit: bigint): Promise<Array<Message>>;
+    getMyConversations(): Promise<Array<Conversation>>;
     getMyStatuses(): Promise<Array<Status>>;
     getPaginatedMessages(conversationId: ConversationId, offset: bigint, limit: bigint): Promise<Array<Message>>;
     getStatusInteractions(statusId: StatusId): Promise<StatusInteractions>;
+    getUnreadCount(conversationId: ConversationId): Promise<bigint>;
+    getUserByPrincipal(userId: UserId): Promise<UserProfile | null>;
     getUserProfile(userId: UserId): Promise<UserProfile | null>;
     isCallerAdmin(): Promise<boolean>;
     isUserOnline(userId: UserId): Promise<boolean>;
     likeStatus(statusId: StatusId): Promise<void>;
     listUserConversations(): Promise<Array<Conversation>>;
+    markAsRead(conversationId: ConversationId): Promise<void>;
     markMessagesAsRead(conversationId: ConversationId): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     searchUserByUsername(username: string): Promise<{
@@ -126,5 +133,7 @@ export interface backendInterface {
     updateCallerAvatar(avatarUrl: string): Promise<void>;
     updateCallerBio(bio: string): Promise<void>;
     updateCallerDisplayName(displayName: string): Promise<void>;
+    updateGroupAvatar(conversationId: ConversationId, avatarUrl: string): Promise<void>;
+    updateGroupName(conversationId: ConversationId, newName: string): Promise<void>;
     updateLastSeen(): Promise<void>;
 }

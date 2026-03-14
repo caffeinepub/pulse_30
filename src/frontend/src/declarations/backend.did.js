@@ -37,6 +37,7 @@ export const UserRole = IDL.Variant({
   'user' : IDL.Null,
   'guest' : IDL.Null,
 });
+export const CommentId = IDL.Nat;
 export const UserId = IDL.Principal;
 export const ConversationId = IDL.Nat;
 export const Timestamp = IDL.Int;
@@ -81,6 +82,17 @@ export const Conversation = IDL.Record({
   'messages' : IDL.Vec(Message),
   'type' : ConversationType,
 });
+export const StatusCommentWithProfile = IDL.Record({
+  'id' : CommentId,
+  'text' : IDL.Text,
+  'author' : UserProfile,
+  'timestamp' : Timestamp,
+});
+export const StatusInteractions = IDL.Record({
+  'likeCount' : IDL.Nat,
+  'comments' : IDL.Vec(StatusCommentWithProfile),
+  'likedByMe' : IDL.Bool,
+});
 export const MessageInput = IDL.Record({ 'content' : MessageContent });
 
 export const idlService = IDL.Service({
@@ -113,11 +125,18 @@ export const idlService = IDL.Service({
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
   'addStatus' : IDL.Func([StatusContent], [StatusId], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'commentOnStatus' : IDL.Func([StatusId, IDL.Text], [CommentId], []),
   'createDirectConversation' : IDL.Func([UserId], [ConversationId], []),
   'createGroupConversation' : IDL.Func(
       [IDL.Text, IDL.Vec(UserId)],
       [ConversationId],
       [],
+    ),
+  'deleteGroupName' : IDL.Func([ConversationId], [], []),
+  'getAllStories' : IDL.Func(
+      [],
+      [IDL.Vec(IDL.Tuple(UserProfile, IDL.Vec(Status)))],
+      ['query'],
     ),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
@@ -136,16 +155,31 @@ export const idlService = IDL.Service({
       [IDL.Opt(IDL.Vec(MessageReadReceipt))],
       ['query'],
     ),
+  'getMessages' : IDL.Func(
+      [ConversationId, IDL.Nat, IDL.Nat],
+      [IDL.Vec(Message)],
+      ['query'],
+    ),
+  'getMyConversations' : IDL.Func([], [IDL.Vec(Conversation)], ['query']),
   'getMyStatuses' : IDL.Func([], [IDL.Vec(Status)], ['query']),
   'getPaginatedMessages' : IDL.Func(
       [ConversationId, IDL.Nat, IDL.Nat],
       [IDL.Vec(Message)],
       ['query'],
     ),
+  'getStatusInteractions' : IDL.Func(
+      [StatusId],
+      [StatusInteractions],
+      ['query'],
+    ),
+  'getUnreadCount' : IDL.Func([ConversationId], [IDL.Nat], ['query']),
+  'getUserByPrincipal' : IDL.Func([UserId], [IDL.Opt(UserProfile)], ['query']),
   'getUserProfile' : IDL.Func([UserId], [IDL.Opt(UserProfile)], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'isUserOnline' : IDL.Func([UserId], [IDL.Bool], ['query']),
+  'likeStatus' : IDL.Func([StatusId], [], []),
   'listUserConversations' : IDL.Func([], [IDL.Vec(Conversation)], ['query']),
+  'markAsRead' : IDL.Func([ConversationId], [], []),
   'markMessagesAsRead' : IDL.Func([ConversationId], [], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'searchUserByUsername' : IDL.Func(
@@ -154,9 +188,12 @@ export const idlService = IDL.Service({
       [],
     ),
   'sendMessage' : IDL.Func([ConversationId, MessageInput], [MessageId], []),
+  'unlikeStatus' : IDL.Func([StatusId], [], []),
   'updateCallerAvatar' : IDL.Func([IDL.Text], [], []),
   'updateCallerBio' : IDL.Func([IDL.Text], [], []),
   'updateCallerDisplayName' : IDL.Func([IDL.Text], [], []),
+  'updateGroupAvatar' : IDL.Func([ConversationId, IDL.Text], [], []),
+  'updateGroupName' : IDL.Func([ConversationId, IDL.Text], [], []),
   'updateLastSeen' : IDL.Func([], [], []),
 });
 
@@ -192,6 +229,7 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Null,
     'guest' : IDL.Null,
   });
+  const CommentId = IDL.Nat;
   const UserId = IDL.Principal;
   const ConversationId = IDL.Nat;
   const Timestamp = IDL.Int;
@@ -236,6 +274,17 @@ export const idlFactory = ({ IDL }) => {
     'messages' : IDL.Vec(Message),
     'type' : ConversationType,
   });
+  const StatusCommentWithProfile = IDL.Record({
+    'id' : CommentId,
+    'text' : IDL.Text,
+    'author' : UserProfile,
+    'timestamp' : Timestamp,
+  });
+  const StatusInteractions = IDL.Record({
+    'likeCount' : IDL.Nat,
+    'comments' : IDL.Vec(StatusCommentWithProfile),
+    'likedByMe' : IDL.Bool,
+  });
   const MessageInput = IDL.Record({ 'content' : MessageContent });
   
   return IDL.Service({
@@ -268,11 +317,18 @@ export const idlFactory = ({ IDL }) => {
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
     'addStatus' : IDL.Func([StatusContent], [StatusId], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'commentOnStatus' : IDL.Func([StatusId, IDL.Text], [CommentId], []),
     'createDirectConversation' : IDL.Func([UserId], [ConversationId], []),
     'createGroupConversation' : IDL.Func(
         [IDL.Text, IDL.Vec(UserId)],
         [ConversationId],
         [],
+      ),
+    'deleteGroupName' : IDL.Func([ConversationId], [], []),
+    'getAllStories' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Tuple(UserProfile, IDL.Vec(Status)))],
+        ['query'],
       ),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
@@ -291,16 +347,35 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Opt(IDL.Vec(MessageReadReceipt))],
         ['query'],
       ),
+    'getMessages' : IDL.Func(
+        [ConversationId, IDL.Nat, IDL.Nat],
+        [IDL.Vec(Message)],
+        ['query'],
+      ),
+    'getMyConversations' : IDL.Func([], [IDL.Vec(Conversation)], ['query']),
     'getMyStatuses' : IDL.Func([], [IDL.Vec(Status)], ['query']),
     'getPaginatedMessages' : IDL.Func(
         [ConversationId, IDL.Nat, IDL.Nat],
         [IDL.Vec(Message)],
         ['query'],
       ),
+    'getStatusInteractions' : IDL.Func(
+        [StatusId],
+        [StatusInteractions],
+        ['query'],
+      ),
+    'getUnreadCount' : IDL.Func([ConversationId], [IDL.Nat], ['query']),
+    'getUserByPrincipal' : IDL.Func(
+        [UserId],
+        [IDL.Opt(UserProfile)],
+        ['query'],
+      ),
     'getUserProfile' : IDL.Func([UserId], [IDL.Opt(UserProfile)], ['query']),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'isUserOnline' : IDL.Func([UserId], [IDL.Bool], ['query']),
+    'likeStatus' : IDL.Func([StatusId], [], []),
     'listUserConversations' : IDL.Func([], [IDL.Vec(Conversation)], ['query']),
+    'markAsRead' : IDL.Func([ConversationId], [], []),
     'markMessagesAsRead' : IDL.Func([ConversationId], [], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'searchUserByUsername' : IDL.Func(
@@ -309,10 +384,12 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'sendMessage' : IDL.Func([ConversationId, MessageInput], [MessageId], []),
+    'unlikeStatus' : IDL.Func([StatusId], [], []),
     'updateCallerAvatar' : IDL.Func([IDL.Text], [], []),
     'updateCallerBio' : IDL.Func([IDL.Text], [], []),
     'updateCallerDisplayName' : IDL.Func([IDL.Text], [], []),
-  'updateCallerDisplayName' : IDL.Func([IDL.Text], [], []),
+    'updateGroupAvatar' : IDL.Func([ConversationId, IDL.Text], [], []),
+    'updateGroupName' : IDL.Func([ConversationId, IDL.Text], [], []),
     'updateLastSeen' : IDL.Func([], [], []),
   });
 };

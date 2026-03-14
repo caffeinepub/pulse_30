@@ -10,6 +10,7 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export type CommentId = bigint;
 export interface Conversation {
   'id' : ConversationId,
   'lastMessageTimestamp' : bigint,
@@ -49,12 +50,23 @@ export interface Status {
   'author' : UserId,
   'timestamp' : Timestamp,
 }
+export interface StatusCommentWithProfile {
+  'id' : CommentId,
+  'text' : string,
+  'author' : UserProfile,
+  'timestamp' : Timestamp,
+}
 export interface StatusContent {
   'text' : string,
   'mediaUrl' : [] | [string],
   'mediaType' : [] | [MediaType],
 }
 export type StatusId = bigint;
+export interface StatusInteractions {
+  'likeCount' : bigint,
+  'comments' : Array<StatusCommentWithProfile>,
+  'likedByMe' : boolean,
+}
 export type Timestamp = bigint;
 export type UserId = Principal;
 export interface UserProfile {
@@ -97,11 +109,14 @@ export interface _SERVICE {
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
   'addStatus' : ActorMethod<[StatusContent], StatusId>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'commentOnStatus' : ActorMethod<[StatusId, string], CommentId>,
   'createDirectConversation' : ActorMethod<[UserId], ConversationId>,
   'createGroupConversation' : ActorMethod<
     [string, Array<UserId>],
     ConversationId
   >,
+  'deleteGroupName' : ActorMethod<[ConversationId], undefined>,
+  'getAllStories' : ActorMethod<[], Array<[UserProfile, Array<Status>]>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getContactStatuses' : ActorMethod<[], Array<[UserProfile, Array<Status>]>>,
@@ -110,15 +125,22 @@ export interface _SERVICE {
     [ConversationId, MessageId],
     [] | [Array<MessageReadReceipt>]
   >,
+  'getMessages' : ActorMethod<[ConversationId, bigint, bigint], Array<Message>>,
+  'getMyConversations' : ActorMethod<[], Array<Conversation>>,
   'getMyStatuses' : ActorMethod<[], Array<Status>>,
   'getPaginatedMessages' : ActorMethod<
     [ConversationId, bigint, bigint],
     Array<Message>
   >,
+  'getStatusInteractions' : ActorMethod<[StatusId], StatusInteractions>,
+  'getUnreadCount' : ActorMethod<[ConversationId], bigint>,
+  'getUserByPrincipal' : ActorMethod<[UserId], [] | [UserProfile]>,
   'getUserProfile' : ActorMethod<[UserId], [] | [UserProfile]>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'isUserOnline' : ActorMethod<[UserId], boolean>,
+  'likeStatus' : ActorMethod<[StatusId], undefined>,
   'listUserConversations' : ActorMethod<[], Array<Conversation>>,
+  'markAsRead' : ActorMethod<[ConversationId], undefined>,
   'markMessagesAsRead' : ActorMethod<[ConversationId], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'searchUserByUsername' : ActorMethod<
@@ -126,9 +148,12 @@ export interface _SERVICE {
     [] | [{ 'userId' : UserId, 'profile' : UserProfile }]
   >,
   'sendMessage' : ActorMethod<[ConversationId, MessageInput], MessageId>,
+  'unlikeStatus' : ActorMethod<[StatusId], undefined>,
   'updateCallerAvatar' : ActorMethod<[string], undefined>,
   'updateCallerBio' : ActorMethod<[string], undefined>,
   'updateCallerDisplayName' : ActorMethod<[string], undefined>,
+  'updateGroupAvatar' : ActorMethod<[ConversationId, string], undefined>,
+  'updateGroupName' : ActorMethod<[ConversationId, string], undefined>,
   'updateLastSeen' : ActorMethod<[], undefined>,
 }
 export declare const idlService: IDL.ServiceClass;

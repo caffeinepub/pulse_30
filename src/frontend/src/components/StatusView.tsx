@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Status, UserProfile } from "../backend";
 import {
   useCommentOnStatus,
-  useGetContactStatuses,
+  useGetAllStories,
   useGetMyStatuses,
   useGetStatusInteractions,
   useLikeStatus,
@@ -63,14 +63,12 @@ function StatusViewer({
   const unlikeStatus = useUnlikeStatus();
   const commentOnStatus = useCommentOnStatus();
 
-  // Force video playback whenever status changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally re-run when index changes to reload video
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.load();
-      videoRef.current.play().catch(() => {});
     }
-    // biome-ignore lint/correctness/useExhaustiveDependencies: video re-mounts via key, run on mount only
-  }, []);
+  }, [index]);
 
   if (!status) return null;
 
@@ -178,27 +176,28 @@ function StatusViewer({
             type="button"
             className="absolute left-0 top-0 w-1/4 h-full z-10"
             onClick={() => setIndex(index - 1)}
-            aria-label="Previous status"
+            aria-label="Previous story"
           />
         )}
         <button
           type="button"
           className="absolute right-0 top-0 w-1/4 h-full z-10"
           onClick={goNext}
-          aria-label="Next status"
+          aria-label="Next story"
         />
 
         {/* Image */}
         {status.content.mediaUrl && mediaKind === "image" && (
           <img
             src={status.content.mediaUrl}
-            alt="Status"
+            alt="Story"
             className="max-w-full max-h-[70vh] object-contain rounded-xl relative z-20"
           />
         )}
 
-        {/* Video — rendered outside interactive zones so touch events reach controls */}
+        {/* Video — onCanPlay triggers play once video is ready, avoiding race conditions */}
         {status.content.mediaUrl && isVideo && (
+          // biome-ignore lint/a11y/useMediaCaption: user-uploaded story video, captions unavailable
           <video
             ref={videoRef}
             key={String(status.id)}
@@ -209,8 +208,11 @@ function StatusViewer({
             playsInline
             controls
             data-webkit-playsinline="true"
+            onCanPlay={() => {
+              videoRef.current?.play().catch(() => {});
+            }}
             className="max-w-full max-h-[70vh] object-contain rounded-xl relative z-20"
-            style={{ WebkitTransform: "translateZ(0)", touchAction: "none" }}
+            style={{ WebkitTransform: "translateZ(0)" }}
           />
         )}
 
@@ -233,12 +235,12 @@ function StatusViewer({
             type="button"
             className="absolute inset-0 z-0"
             onClick={goNext}
-            aria-label="Next status"
+            aria-label="Next story"
           />
         )}
       </div>
 
-      {/* Like / Comment bar (only for others' statuses, or show read-only for own) */}
+      {/* Like / Comment bar */}
       <div
         className="shrink-0 z-30 px-4 pb-4 pt-2 flex flex-col gap-2"
         style={{ background: "oklch(0.05 0.005 55 / 0.9)" }}
@@ -344,7 +346,13 @@ export default function StatusView({
   const [profileViewOpen, setProfileViewOpen] = useState(false);
 
   const { data: myStatuses = [] } = useGetMyStatuses();
-  const { data: contactStatuses = [] } = useGetContactStatuses();
+  const { data: allStories = [] } = useGetAllStories();
+
+  // Filter out current user's own stories from the all-stories list
+  const otherStories = allStories.filter(
+    ([, statuses]) =>
+      statuses.length > 0 && statuses[0].author.toText() !== currentUserId,
+  );
 
   const myLatest = myStatuses[myStatuses.length - 1];
   const myName = currentProfile?.displayName ?? "Me";
@@ -356,13 +364,13 @@ export default function StatusView({
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
-      {/* My Status */}
+      {/* My Story */}
       <div className="px-4 py-3 border-b border-border">
         <p
           className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2"
           style={{ letterSpacing: "0.1em" }}
         >
-          My Status
+          My Story
         </p>
         <button
           type="button"
@@ -413,11 +421,11 @@ export default function StatusView({
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm text-foreground">My Status</p>
+            <p className="font-medium text-sm text-foreground">My Story</p>
             <p className="text-xs text-muted-foreground">
               {myStatuses.length > 0
                 ? `${myStatuses.length} update${myStatuses.length !== 1 ? "s" : ""} · ${formatStatusTime(myLatest.timestamp)}`
-                : "Tap to add a status update"}
+                : "Tap to add a story"}
             </p>
           </div>
           <Button
@@ -435,17 +443,17 @@ export default function StatusView({
         </button>
       </div>
 
-      {/* Contact Statuses */}
-      {contactStatuses.length > 0 && (
+      {/* Recent Stories */}
+      {otherStories.length > 0 && (
         <div className="px-4 py-3">
           <p
             className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2"
             style={{ letterSpacing: "0.1em" }}
           >
-            Recent Updates
+            Recent Stories
           </p>
           <div className="flex flex-col gap-1">
-            {contactStatuses.map(([profile, statuses], idx) => {
+            {otherStories.map(([profile, statuses], idx) => {
               if (!statuses.length) return null;
               const latest = statuses[statuses.length - 1];
               const ocid = idx + 1;
@@ -494,7 +502,7 @@ export default function StatusView({
         </div>
       )}
 
-      {contactStatuses.length === 0 && myStatuses.length === 0 && (
+      {otherStories.length === 0 && myStatuses.length === 0 && (
         <div
           data-ocid="status.empty_state"
           className="flex flex-col items-center justify-center py-16 px-6 text-center"
@@ -509,17 +517,17 @@ export default function StatusView({
             />
           </div>
           <p className="text-sm font-medium text-muted-foreground">
-            No status updates yet
+            No stories yet
           </p>
           <p className="text-xs text-muted-foreground/60 mt-1">
-            Be the first to share a status
+            Be the first to share a story
           </p>
         </div>
       )}
 
       <AddStatusModal open={addStatusOpen} onOpenChange={setAddStatusOpen} />
 
-      {/* Profile modal triggered by avatar click inside status viewer */}
+      {/* Profile modal triggered by avatar click inside story viewer */}
       <UserProfileModal
         userId={profileViewUserId}
         open={profileViewOpen}

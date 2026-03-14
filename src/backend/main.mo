@@ -16,8 +16,6 @@ import AccessControl "authorization/access-control";
 import MixinStorage "blob-storage/Mixin";
 import Storage "blob-storage/Storage";
 
-
-
 actor {
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
@@ -29,6 +27,9 @@ actor {
   type MessageId = Nat;
   type StatusId = Nat;
   type CommentId = Nat;
+  type ChannelId = Nat;
+  type ChannelPostId = Nat;
+  type ChannelCommentId = Nat;
   type Timestamp = Int;
 
   public type ConversationType = {
@@ -113,6 +114,58 @@ actor {
     comments : [StatusCommentWithProfile];
   };
 
+  // Channel Types
+  public type Channel = {
+    id : ChannelId;
+    name : Text;
+    description : Text;
+    avatarUrl : ?Text;
+    owner : UserId;
+    createdAt : Timestamp;
+  };
+
+  public type ChannelPostContent = {
+    text : Text;
+    mediaUrl : ?Text;
+    mediaType : ?MediaType;
+  };
+
+  public type ChannelPost = {
+    id : ChannelPostId;
+    channelId : ChannelId;
+    author : UserId;
+    content : ChannelPostContent;
+    timestamp : Timestamp;
+  };
+
+  public type ChannelComment = {
+    id : ChannelCommentId;
+    postId : ChannelPostId;
+    author : UserId;
+    text : Text;
+    timestamp : Timestamp;
+  };
+
+  public type ChannelCommentWithProfile = {
+    id : ChannelCommentId;
+    author : UserProfile;
+    text : Text;
+    timestamp : Timestamp;
+  };
+
+  public type ChannelPostInteractions = {
+    likeCount : Nat;
+    likedByMe : Bool;
+    comments : [ChannelCommentWithProfile];
+  };
+
+  public type ChannelWithMeta = {
+    channel : Channel;
+    followerCount : Nat;
+    isFollowing : Bool;
+    ownerProfile : UserProfile;
+  };
+
   // Message DTOs
   public type MessageInput = {
     content : MessageContent;
@@ -123,12 +176,22 @@ actor {
   var nextMessageId : MessageId = 1;
   var nextStatusId : StatusId = 1;
   var nextCommentId : CommentId = 1;
+  var nextChannelId : ChannelId = 1;
+  var nextChannelPostId : ChannelPostId = 1;
+  var nextChannelCommentId : ChannelCommentId = 1;
 
   let conversations = Map.empty<ConversationId, Conversation>();
   let users = Map.empty<UserId, UserProfile>();
   let statuses = Map.empty<StatusId, Status>();
   let statusLikes = Map.empty<StatusId, Set.Set<UserId>>();
   let statusComments = Map.empty<CommentId, StatusComment>();
+
+  // Channel state
+  let channels = Map.empty<ChannelId, Channel>();
+  let channelPosts = Map.empty<ChannelPostId, ChannelPost>();
+  let channelFollowers = Map.empty<ChannelId, Set.Set<UserId>>();
+  let channelPostLikes = Map.empty<ChannelPostId, Set.Set<UserId>>();
+  let channelComments = Map.empty<ChannelCommentId, ChannelComment>();
 
   // Internal functions
   func getConversationOrTrap(conversationId : ConversationId) : Conversation {
@@ -174,6 +237,13 @@ actor {
   };
 
   public query ({ caller }) func getUserProfile(userId : UserId) : async ?UserProfile {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can view profiles");
+    };
+    users.get(userId);
+  };
+
+  public query ({ caller }) func getUserByPrincipal(userId : UserId) : async ?UserProfile {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can view profiles");
     };
@@ -261,7 +331,6 @@ actor {
     };
   };
 
-  // New search functionality
   public shared ({ caller }) func searchUserByUsername(username : Text) : async ?{ userId : UserId; profile : UserProfile } {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can search profiles");
@@ -285,7 +354,6 @@ actor {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can create conversations");
     };
-    // Return existing direct conversation if one already exists between these two users
     let existing = conversations.values().toArray().find(
       func(conv) {
         switch (conv.type_) {
@@ -343,6 +411,17 @@ actor {
     conversations.get(conversationId);
   };
 
+  public query ({ caller }) func getMyConversations() : async [Conversation] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can list conversations");
+    };
+    conversations.values().toArray().filter(
+      func(conv) {
+        conv.members.findIndex(func(m) { m == caller }) != null;
+      }
+    );
+  };
+
   public query ({ caller }) func listUserConversations() : async [Conversation] {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can list conversations");
@@ -384,6 +463,22 @@ actor {
     message.id;
   };
 
+  public query ({ caller }) func getMessages(conversationId : ConversationId, offset : Nat, limit : Nat) : async [Message] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can view messages");
+    };
+    if (not isConversationMember(conversationId, caller)) {
+      Runtime.trap("Unauthorized: You are not a member of this conversation");
+    };
+
+    let conversation = getConversationOrTrap(conversationId);
+    let msgs = conversation.messages;
+    if (offset >= msgs.size()) { return [] };
+    let end = Nat.min(offset + limit, msgs.size());
+    let varMsgs : [var Message] = msgs.toVarArray();
+    varMsgs.sliceToArray(offset, end);
+  };
+
   public query ({ caller }) func getPaginatedMessages(conversationId : ConversationId, offset : Nat, limit : Nat) : async [Message] {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can view messages");
@@ -398,6 +493,31 @@ actor {
     let end = Nat.min(offset + limit, msgs.size());
     let varMsgs : [var Message] = msgs.toVarArray();
     varMsgs.sliceToArray(offset, end);
+  };
+
+  public shared ({ caller }) func markAsRead(conversationId : ConversationId) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can mark messages as read");
+    };
+    if (not isConversationMember(conversationId, caller)) {
+      Runtime.trap("Unauthorized: You are not a member of this conversation");
+    };
+
+    let conversation = getConversationOrTrap(conversationId);
+    let now = Time.now();
+
+    let updatedMessages = conversation.messages.map(
+      func(msg) {
+        if (msg.readReceipts.findIndex(func(rr) { rr.userId == caller }) != null) {
+          msg;
+        } else {
+          let newReceipts = msg.readReceipts.concat([{ userId = caller; timestamp = now }]);
+          { msg with readReceipts = newReceipts };
+        };
+      }
+    );
+    let updatedConversation = { conversation with messages = updatedMessages };
+    saveConversation(updatedConversation);
   };
 
   public shared ({ caller }) func markMessagesAsRead(conversationId : ConversationId) : async () {
@@ -425,6 +545,25 @@ actor {
     saveConversation(updatedConversation);
   };
 
+  public query ({ caller }) func getUnreadCount(conversationId : ConversationId) : async Nat {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can view unread count");
+    };
+    if (not isConversationMember(conversationId, caller)) {
+      Runtime.trap("Unauthorized: You are not a member of this conversation");
+    };
+
+    let conversation = getConversationOrTrap(conversationId);
+    var count = 0;
+    for (msg in conversation.messages.vals()) {
+      let hasRead = msg.readReceipts.findIndex(func(rr) { rr.userId == caller }) != null;
+      if (not hasRead and msg.sender != caller) {
+        count += 1;
+      };
+    };
+    count;
+  };
+
   public query ({ caller }) func getMessageReadReceipts(conversationId : ConversationId, messageId : MessageId) : async ?[MessageReadReceipt] {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can view read receipts");
@@ -442,7 +581,71 @@ actor {
     };
   };
 
-  // Custom compare function for UserId (Principal)
+  public shared ({ caller }) func updateGroupName(conversationId : ConversationId, newName : Text) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can update group name");
+    };
+    if (not isConversationMember(conversationId, caller)) {
+      Runtime.trap("Unauthorized: You are not a member of this conversation");
+    };
+
+    let conversation = getConversationOrTrap(conversationId);
+    switch (conversation.type_) {
+      case (#direct) {
+        Runtime.trap("Cannot update name of direct conversation");
+      };
+      case (#group(_)) {
+        let updatedConversation = {
+          conversation with
+          type_ = #group(newName);
+        };
+        saveConversation(updatedConversation);
+      };
+    };
+  };
+
+  public shared ({ caller }) func updateGroupAvatar(conversationId : ConversationId, avatarUrl : Text) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can update group avatar");
+    };
+    if (not isConversationMember(conversationId, caller)) {
+      Runtime.trap("Unauthorized: You are not a member of this conversation");
+    };
+
+    let conversation = getConversationOrTrap(conversationId);
+    switch (conversation.type_) {
+      case (#direct) {
+        Runtime.trap("Cannot update avatar of direct conversation");
+      };
+      case (#group(_)) {
+        ();
+      };
+    };
+  };
+
+  public shared ({ caller }) func deleteGroupName(conversationId : ConversationId) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can delete group name");
+    };
+    if (not isConversationMember(conversationId, caller)) {
+      Runtime.trap("Unauthorized: You are not a member of this conversation");
+    };
+
+    let conversation = getConversationOrTrap(conversationId);
+    switch (conversation.type_) {
+      case (#direct) {
+        Runtime.trap("Cannot delete name of direct conversation");
+      };
+      case (#group(_)) {
+        let updatedConversation = {
+          conversation with
+          type_ = #group("");
+        };
+        saveConversation(updatedConversation);
+      };
+    };
+  };
+
   func compareUserId(a : UserId, b : UserId) : Order.Order {
     let aBytes = a.toBlob();
     let bBytes = b.toBlob();
@@ -484,9 +687,10 @@ actor {
       Runtime.trap("Unauthorized: Only users can view statuses");
     };
     let now = Time.now();
+    let expiryTime = 72 * 60 * 60 * 1_000_000_000;
     statuses.values().toArray().filter(
       func(status) {
-        status.author == caller and (now - status.timestamp) < (24 * 60 * 60 * 1_000_000_000);
+        status.author == caller and (now - status.timestamp) < expiryTime;
       }
     );
   };
@@ -496,7 +700,6 @@ actor {
       Runtime.trap("Unauthorized: Only users can view contact statuses");
     };
 
-    // Find direct conversations
     let directContacts = Set.empty<UserId>();
 
     conversations.values().toArray().forEach(
@@ -516,13 +719,13 @@ actor {
       }
     );
 
-    // Group statuses by author for direct contacts
     let now = Time.now();
+    let expiryTime = 72 * 60 * 60 * 1_000_000_000;
     let contactStatuses = directContacts.toArray().map(func(contact) {
       let author = contact;
       let userStatuses = statuses.values().toArray().filter(
         func(status) {
-          status.author == author and (now - status.timestamp) < (24 * 60 * 60 * 1_000_000_000);
+          status.author == author and (now - status.timestamp) < expiryTime;
         }
       );
       let authorProfile = getUserProfileOrTrap(author);
@@ -532,7 +735,46 @@ actor {
     contactStatuses;
   };
 
-  // Status Interactions
+  public query ({ caller }) func getAllStories() : async [(UserProfile, [Status])] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can view all stories");
+    };
+
+    let now = Time.now();
+    let expiryTime = 72 * 60 * 60 * 1_000_000_000;
+
+    let statusesByAuthor = Map.empty<UserId, List.List<Status>>();
+
+    for (status in statuses.values()) {
+      if ((now - status.timestamp) < expiryTime) {
+        switch (statusesByAuthor.get(status.author)) {
+          case (null) {
+            let statuses = List.empty<Status>();
+            statuses.add(status);
+            statusesByAuthor.add(status.author, statuses);
+          };
+          case (?existing) {
+            existing.add(status);
+          };
+        };
+      };
+    };
+
+    let resultList = List.empty<(UserProfile, [Status])>();
+    for ((authorId, statusList) in statusesByAuthor.entries()) {
+      if (statusList.size() > 0) {
+        switch (users.get(authorId)) {
+          case (?profile) {
+            resultList.add((profile, statusList.toArray()));
+          };
+          case (null) { () };
+        };
+      };
+    };
+
+    resultList.toArray();
+  };
+
   public shared ({ caller }) func likeStatus(statusId : StatusId) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can like statuses");
@@ -600,5 +842,225 @@ actor {
         { id = c.id; author = authorProfile; text = c.text; timestamp = c.timestamp };
       });
     { likeCount; likedByMe; comments };
+  };
+
+  // ============================================================
+  // Channel Endpoints
+  // ============================================================
+
+  public shared ({ caller }) func createChannel(name : Text, description : Text, avatarUrl : ?Text) : async ChannelId {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can create channels");
+    };
+    let channelId = nextChannelId;
+    nextChannelId += 1;
+    let channel = {
+      id = channelId;
+      name;
+      description;
+      avatarUrl;
+      owner = caller;
+      createdAt = Time.now();
+    };
+    channels.add(channelId, channel);
+    channelId;
+  };
+
+  public shared ({ caller }) func updateChannel(channelId : ChannelId, name : Text, description : Text, avatarUrl : ?Text) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can update channels");
+    };
+    switch (channels.get(channelId)) {
+      case (null) { Runtime.trap("Channel not found") };
+      case (?ch) {
+        if (ch.owner != caller) { Runtime.trap("Only the channel owner can update it") };
+        channels.add(channelId, { ch with name; description; avatarUrl });
+      };
+    };
+  };
+
+  public query ({ caller }) func getAllChannels() : async [ChannelWithMeta] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can view channels");
+    };
+    channels.values().toArray().map(func(ch) {
+      let followerCount = switch (channelFollowers.get(ch.id)) {
+        case (null) { 0 };
+        case (?s) { s.size() };
+      };
+      let isFollowing = switch (channelFollowers.get(ch.id)) {
+        case (null) { false };
+        case (?s) { s.contains(caller) };
+      };
+      let ownerProfile = switch (users.get(ch.owner)) {
+        case (null) { { username = "unknown"; displayName = "Unknown"; lastSeen = 0; bio = null; avatarUrl = null } };
+        case (?p) { p };
+      };
+      { channel = ch; followerCount; isFollowing; ownerProfile };
+    });
+  };
+
+  public query ({ caller }) func getChannel(channelId : ChannelId) : async ?ChannelWithMeta {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can view channels");
+    };
+    switch (channels.get(channelId)) {
+      case (null) { null };
+      case (?ch) {
+        let followerCount = switch (channelFollowers.get(ch.id)) {
+          case (null) { 0 };
+          case (?s) { s.size() };
+        };
+        let isFollowing = switch (channelFollowers.get(ch.id)) {
+          case (null) { false };
+          case (?s) { s.contains(caller) };
+        };
+        let ownerProfile = switch (users.get(ch.owner)) {
+          case (null) { { username = "unknown"; displayName = "Unknown"; lastSeen = 0; bio = null; avatarUrl = null } };
+          case (?p) { p };
+        };
+        ?{ channel = ch; followerCount; isFollowing; ownerProfile };
+      };
+    };
+  };
+
+  public shared ({ caller }) func followChannel(channelId : ChannelId) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can follow channels");
+    };
+    switch (channelFollowers.get(channelId)) {
+      case (null) {
+        let s = Set.empty<UserId>();
+        s.add(caller);
+        channelFollowers.add(channelId, s);
+      };
+      case (?s) { s.add(caller) };
+    };
+  };
+
+  public shared ({ caller }) func unfollowChannel(channelId : ChannelId) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can unfollow channels");
+    };
+    switch (channelFollowers.get(channelId)) {
+      case (null) { () };
+      case (?s) { s.remove(caller) };
+    };
+  };
+
+  public shared ({ caller }) func addChannelPost(channelId : ChannelId, content : ChannelPostContent) : async ChannelPostId {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can post to channels");
+    };
+    switch (channels.get(channelId)) {
+      case (null) { Runtime.trap("Channel not found") };
+      case (?ch) {
+        if (ch.owner != caller) { Runtime.trap("Only the channel owner can post") };
+      };
+    };
+    let postId = nextChannelPostId;
+    nextChannelPostId += 1;
+    let post = {
+      id = postId;
+      channelId;
+      author = caller;
+      content;
+      timestamp = Time.now();
+    };
+    channelPosts.add(postId, post);
+    postId;
+  };
+
+  public query ({ caller }) func getChannelPosts(channelId : ChannelId) : async [ChannelPost] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can view channel posts");
+    };
+    channelPosts.values().toArray().filter(func(p) { p.channelId == channelId });
+  };
+
+  public shared ({ caller }) func likeChannelPost(postId : ChannelPostId) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can like posts");
+    };
+    switch (channelPostLikes.get(postId)) {
+      case (null) {
+        let s = Set.empty<UserId>();
+        s.add(caller);
+        channelPostLikes.add(postId, s);
+      };
+      case (?s) { s.add(caller) };
+    };
+  };
+
+  public shared ({ caller }) func unlikeChannelPost(postId : ChannelPostId) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can unlike posts");
+    };
+    switch (channelPostLikes.get(postId)) {
+      case (null) { () };
+      case (?s) { s.remove(caller) };
+    };
+  };
+
+  public shared ({ caller }) func commentOnChannelPost(postId : ChannelPostId, text : Text) : async ChannelCommentId {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can comment on posts");
+    };
+    let commentId = nextChannelCommentId;
+    nextChannelCommentId += 1;
+    channelComments.add(commentId, { id = commentId; postId; author = caller; text; timestamp = Time.now() });
+    commentId;
+  };
+
+  public query ({ caller }) func getChannelPostInteractions(postId : ChannelPostId) : async ChannelPostInteractions {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can view post interactions");
+    };
+    let likeCount = switch (channelPostLikes.get(postId)) {
+      case (null) { 0 };
+      case (?s) { s.size() };
+    };
+    let likedByMe = switch (channelPostLikes.get(postId)) {
+      case (null) { false };
+      case (?s) { s.contains(caller) };
+    };
+    let comments = channelComments.values().toArray()
+      .filter(func(c) { c.postId == postId })
+      .map(func(c) {
+        let authorProfile = switch (users.get(c.author)) {
+          case (null) { { username = "unknown"; displayName = "Unknown"; lastSeen = 0; bio = null; avatarUrl = null } };
+          case (?p) { p };
+        };
+        { id = c.id; author = authorProfile; text = c.text; timestamp = c.timestamp };
+      });
+    { likeCount; likedByMe; comments };
+  };
+
+  public shared ({ caller }) func forwardChannelPost(postId : ChannelPostId, conversationId : ConversationId) : async MessageId {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized");
+    };
+    if (not isConversationMember(conversationId, caller)) {
+      Runtime.trap("Unauthorized: You are not a member of this conversation");
+    };
+    let post = switch (channelPosts.get(postId)) {
+      case (null) { Runtime.trap("Post not found") };
+      case (?p) { p };
+    };
+    let message = {
+      id = nextMessageId;
+      sender = caller;
+      content = {
+        text = post.content.text;
+        mediaUrl = post.content.mediaUrl;
+        mediaType = post.content.mediaType;
+      };
+      timestamp = Time.now();
+      readReceipts = [{ userId = caller; timestamp = Time.now() }];
+    };
+    let conversation = getConversationOrTrap(conversationId);
+    saveConversation({ conversation with messages = conversation.messages.concat([message]); lastMessageTimestamp = Time.now() });
+    nextMessageId += 1;
+    message.id;
   };
 };

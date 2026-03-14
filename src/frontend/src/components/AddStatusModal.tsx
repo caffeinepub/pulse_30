@@ -55,11 +55,11 @@ export default function AddStatusModal({
         mediaUrl: result.url,
         mediaType: result.mediaType,
       });
-      toast.success("Status posted!");
+      toast.success("Story posted!");
       reset();
       onOpenChange(false);
     } catch {
-      toast.error("Failed to post status");
+      toast.error("Failed to post story");
     }
   };
 
@@ -79,7 +79,7 @@ export default function AddStatusModal({
       >
         <DialogHeader>
           <DialogTitle className="font-display text-foreground">
-            Add Status
+            Add Story
           </DialogTitle>
         </DialogHeader>
 
@@ -173,7 +173,7 @@ export default function AddStatusModal({
                 Posting...
               </>
             ) : (
-              "Post Status"
+              "Post Story"
             )}
           </Button>
         </div>

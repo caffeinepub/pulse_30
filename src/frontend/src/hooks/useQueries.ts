@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   Conversation,
   ConversationId,
+  MediaType,
   Message,
   MessageInput,
   Status,
@@ -12,6 +13,56 @@ import type {
   UserProfile,
 } from "../backend";
 import { useActor } from "./useActor";
+
+// ─── Shared types (not in backend.d.ts yet) ───────────────────────────────────
+export type ChannelId = bigint;
+export type ChannelPostId = bigint;
+export type ChannelCommentId = bigint;
+
+export interface Channel {
+  id: ChannelId;
+  name: string;
+  description: string;
+  avatarUrl?: string;
+  owner: UserId;
+  createdAt: bigint;
+}
+
+export interface ChannelWithMeta {
+  channel: Channel;
+  followerCount: bigint;
+  isFollowing: boolean;
+  ownerProfile: UserProfile;
+}
+
+export interface ChannelPostContent {
+  text: string;
+  mediaUrl?: string;
+  mediaType?: MediaType;
+}
+
+export interface ChannelPost {
+  id: ChannelPostId;
+  channelId: ChannelId;
+  author: UserId;
+  content: ChannelPostContent;
+  timestamp: bigint;
+}
+
+export interface ChannelCommentWithProfile {
+  id: ChannelCommentId;
+  text: string;
+  author: UserProfile;
+  timestamp: bigint;
+}
+
+export interface ChannelPostInteractions {
+  likeCount: bigint;
+  likedByMe: boolean;
+  comments: ChannelCommentWithProfile[];
+}
+
+// ─── Existing hooks ───────────────────────────────────────────────────────────
 
 export function useGetCallerUserProfile() {
   const { actor, isFetching: actorFetching } = useActor();
@@ -212,6 +263,7 @@ export function useAddStatus() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["myStatuses"] });
       queryClient.invalidateQueries({ queryKey: ["contactStatuses"] });
+      queryClient.invalidateQueries({ queryKey: ["allStories"] });
     },
   });
 }
@@ -236,6 +288,19 @@ export function useGetContactStatuses() {
     queryFn: async () => {
       if (!actor) return [];
       return actor.getContactStatuses();
+    },
+    enabled: !!actor && !isFetching,
+    refetchInterval: 30000,
+  });
+}
+
+export function useGetAllStories() {
+  const { actor, isFetching } = useActor();
+  return useQuery<Array<[UserProfile, Array<Status>]>>({
+    queryKey: ["allStories"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return (actor as any).getAllStories();
     },
     enabled: !!actor && !isFetching,
     refetchInterval: 30000,
@@ -290,7 +355,7 @@ export function useLikeStatus() {
   return useMutation({
     mutationFn: async (statusId: StatusId) => {
       if (!actor) throw new Error("Actor not available");
-      (actor as any).likeStatus(statusId);
+      await (actor as any).likeStatus(statusId);
     },
     onSuccess: (_, statusId) => {
       queryClient.invalidateQueries({
@@ -306,7 +371,7 @@ export function useUnlikeStatus() {
   return useMutation({
     mutationFn: async (statusId: StatusId) => {
       if (!actor) throw new Error("Actor not available");
-      (actor as any).unlikeStatus(statusId);
+      await (actor as any).unlikeStatus(statusId);
     },
     onSuccess: (_, statusId) => {
       queryClient.invalidateQueries({
@@ -345,5 +410,237 @@ export function useGetStatusInteractions(statusId: StatusId | null) {
     },
     enabled: !!actor && !isFetching && statusId !== null,
     refetchInterval: 5000,
+  });
+}
+
+// ─── Channel hooks ────────────────────────────────────────────────────────────
+
+export function useGetAllChannels() {
+  const { actor, isFetching } = useActor();
+  return useQuery<ChannelWithMeta[]>({
+    queryKey: ["channels"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return (actor as any).getAllChannels();
+    },
+    enabled: !!actor && !isFetching,
+    refetchInterval: 15000,
+  });
+}
+
+export function useGetChannel(channelId: ChannelId | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<ChannelWithMeta | null>({
+    queryKey: ["channel", channelId?.toString()],
+    queryFn: async () => {
+      if (!actor || channelId === null) return null;
+      return (actor as any).getChannel(channelId);
+    },
+    enabled: !!actor && !isFetching && channelId !== null,
+    refetchInterval: 10000,
+  });
+}
+
+export function useCreateChannel() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      name,
+      description,
+      avatarUrl,
+    }: {
+      name: string;
+      description: string;
+      avatarUrl?: string;
+    }) => {
+      if (!actor) throw new Error("Actor not available");
+      return (actor as any).createChannel(name, description, avatarUrl);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["channels"] });
+    },
+  });
+}
+
+export function useUpdateChannel() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      channelId,
+      name,
+      description,
+      avatarUrl,
+    }: {
+      channelId: ChannelId;
+      name: string;
+      description: string;
+      avatarUrl?: string;
+    }) => {
+      if (!actor) throw new Error("Actor not available");
+      return (actor as any).updateChannel(
+        channelId,
+        name,
+        description,
+        avatarUrl,
+      );
+    },
+    onSuccess: (_, { channelId }) => {
+      queryClient.invalidateQueries({ queryKey: ["channels"] });
+      queryClient.invalidateQueries({
+        queryKey: ["channel", channelId.toString()],
+      });
+    },
+  });
+}
+
+export function useFollowChannel() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (channelId: ChannelId) => {
+      if (!actor) throw new Error("Actor not available");
+      await (actor as any).followChannel(channelId);
+    },
+    onSuccess: (_, channelId) => {
+      queryClient.invalidateQueries({ queryKey: ["channels"] });
+      queryClient.invalidateQueries({
+        queryKey: ["channel", channelId.toString()],
+      });
+    },
+  });
+}
+
+export function useUnfollowChannel() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (channelId: ChannelId) => {
+      if (!actor) throw new Error("Actor not available");
+      await (actor as any).unfollowChannel(channelId);
+    },
+    onSuccess: (_, channelId) => {
+      queryClient.invalidateQueries({ queryKey: ["channels"] });
+      queryClient.invalidateQueries({
+        queryKey: ["channel", channelId.toString()],
+      });
+    },
+  });
+}
+
+export function useGetChannelPosts(channelId: ChannelId | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<ChannelPost[]>({
+    queryKey: ["channelPosts", channelId?.toString()],
+    queryFn: async () => {
+      if (!actor || channelId === null) return [];
+      return (actor as any).getChannelPosts(channelId);
+    },
+    enabled: !!actor && !isFetching && channelId !== null,
+    refetchInterval: 10000,
+  });
+}
+
+export function useAddChannelPost(channelId: ChannelId | null) {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (content: ChannelPostContent) => {
+      if (!actor || channelId === null) throw new Error("Actor not available");
+      return (actor as any).addChannelPost(channelId, content);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["channelPosts", channelId?.toString()],
+      });
+    },
+  });
+}
+
+export function useGetChannelPostInteractions(postId: ChannelPostId | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<ChannelPostInteractions | null>({
+    queryKey: ["channelPostInteractions", postId?.toString()],
+    queryFn: async () => {
+      if (!actor || postId === null) return null;
+      return (actor as any).getChannelPostInteractions(postId);
+    },
+    enabled: !!actor && !isFetching && postId !== null,
+    refetchInterval: 10000,
+  });
+}
+
+export function useLikeChannelPost() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (postId: ChannelPostId) => {
+      if (!actor) throw new Error("Actor not available");
+      await (actor as any).likeChannelPost(postId);
+    },
+    onSuccess: (_, postId) => {
+      queryClient.invalidateQueries({
+        queryKey: ["channelPostInteractions", postId.toString()],
+      });
+    },
+  });
+}
+
+export function useUnlikeChannelPost() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (postId: ChannelPostId) => {
+      if (!actor) throw new Error("Actor not available");
+      await (actor as any).unlikeChannelPost(postId);
+    },
+    onSuccess: (_, postId) => {
+      queryClient.invalidateQueries({
+        queryKey: ["channelPostInteractions", postId.toString()],
+      });
+    },
+  });
+}
+
+export function useCommentOnChannelPost() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      postId,
+      text,
+    }: { postId: ChannelPostId; text: string }) => {
+      if (!actor) throw new Error("Actor not available");
+      return (actor as any).commentOnChannelPost(postId, text);
+    },
+    onSuccess: (_, { postId }) => {
+      queryClient.invalidateQueries({
+        queryKey: ["channelPostInteractions", postId.toString()],
+      });
+    },
+  });
+}
+
+export function useForwardChannelPost() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      postId,
+      conversationId,
+    }: {
+      postId: ChannelPostId;
+      conversationId: ConversationId;
+    }) => {
+      if (!actor) throw new Error("Actor not available");
+      return (actor as any).forwardChannelPost(postId, conversationId);
+    },
+    onSuccess: (_, { conversationId }) => {
+      queryClient.invalidateQueries({
+        queryKey: ["messages", conversationId.toString()],
+      });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
   });
 }

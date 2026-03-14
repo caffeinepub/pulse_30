@@ -16,6 +16,7 @@ import {
   MoreVertical,
   Pencil,
   Plus,
+  Radio,
   Search,
 } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -24,6 +25,8 @@ import {
   useGetUserProfile,
   useListUserConversations,
 } from "../hooks/useQueries";
+import type { ChannelId } from "../hooks/useQueries";
+import ChannelsTab from "./ChannelsTab";
 import EditProfileModal from "./EditProfileModal";
 import NewChatModal from "./NewChatModal";
 import StatusView from "./StatusView";
@@ -163,6 +166,7 @@ interface SidebarProps {
   currentProfile: UserProfile | null;
   activeConversationId: ConversationId | null;
   onSelectConversation: (id: ConversationId) => void;
+  onSelectChannel: (id: ChannelId) => void;
   onStartChat: (userId: string) => void;
   onLogout: () => void;
 }
@@ -172,6 +176,7 @@ export default function Sidebar({
   currentProfile,
   activeConversationId,
   onSelectConversation,
+  onSelectChannel,
   onStartChat,
   onLogout,
 }: SidebarProps) {
@@ -211,16 +216,18 @@ export default function Sidebar({
             </span>
           </div>
           <div className="flex items-center gap-1">
-            <Button
-              data-ocid="sidebar.new_chat_button"
-              size="icon"
-              variant="ghost"
-              onClick={() => setNewChatOpen(true)}
-              className="h-9 w-9 rounded-xl hover:bg-muted"
-              aria-label="New chat"
-            >
-              <Plus className="h-5 w-5" />
-            </Button>
+            {activeTab === "chats" && (
+              <Button
+                data-ocid="sidebar.new_chat_button"
+                size="icon"
+                variant="ghost"
+                onClick={() => setNewChatOpen(true)}
+                className="h-9 w-9 rounded-xl hover:bg-muted"
+                aria-label="New chat"
+              >
+                <Plus className="h-5 w-5" />
+              </Button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -284,7 +291,7 @@ export default function Sidebar({
           </div>
         )}
 
-        {/* Chats/Status Tabs */}
+        {/* Chats / Stories / Channels Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="w-full bg-muted/50" data-ocid="sidebar.tab">
             <TabsTrigger
@@ -292,7 +299,7 @@ export default function Sidebar({
               className="flex-1"
               data-ocid="sidebar.chats_tab"
             >
-              <MessageCircle className="h-4 w-4 mr-1.5" />
+              <MessageCircle className="h-3.5 w-3.5 mr-1" />
               Chats
             </TabsTrigger>
             <TabsTrigger
@@ -301,10 +308,18 @@ export default function Sidebar({
               data-ocid="sidebar.status_tab"
             >
               <div
-                className="w-3 h-3 mr-1.5 rounded-full border-2"
+                className="w-3 h-3 mr-1 rounded-full border-2 shrink-0"
                 style={{ borderColor: "currentColor" }}
               />
-              Status
+              Stories
+            </TabsTrigger>
+            <TabsTrigger
+              value="channels"
+              className="flex-1"
+              data-ocid="sidebar.channels_tab"
+            >
+              <Radio className="h-3.5 w-3.5 mr-1" />
+              Channels
             </TabsTrigger>
           </TabsList>
 
@@ -323,6 +338,7 @@ export default function Sidebar({
           </TabsContent>
 
           <TabsContent value="status" className="mt-0" />
+          <TabsContent value="channels" className="mt-0" />
         </Tabs>
       </div>
 
@@ -332,6 +348,11 @@ export default function Sidebar({
           currentUserId={currentUserId}
           currentProfile={currentProfile}
           onStartChat={onStartChat}
+        />
+      ) : activeTab === "channels" ? (
+        <ChannelsTab
+          currentUserId={currentUserId}
+          onSelectChannel={onSelectChannel}
         />
       ) : (
         <div className="flex-1 overflow-y-auto scrollbar-thin">
@@ -377,7 +398,7 @@ export default function Sidebar({
         </div>
       )}
 
-      {/* New Chat Modal */}
+      {/* Edit Profile & New Chat Modals */}
       <EditProfileModal
         open={editProfileOpen}
         onOpenChange={setEditProfileOpen}
