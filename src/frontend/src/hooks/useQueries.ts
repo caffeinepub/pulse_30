@@ -972,3 +972,13 @@ export function useRemoveGroupMember() {
     },
   });
 }
+
+export function useSearchUsers() {
+  const { actor } = useActor();
+  return useMutation({
+    mutationFn: async (query: string) => {
+      if (!actor) throw new Error("Actor not available");
+      return (actor as any).searchUsers(query);
+    },
+  });
+}

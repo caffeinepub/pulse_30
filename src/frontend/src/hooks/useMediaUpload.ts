@@ -5,6 +5,23 @@ import { loadConfig } from "../config";
 import { StorageClient } from "../utils/StorageClient";
 import { useInternetIdentity } from "./useInternetIdentity";
 
+// Map file MIME type to a canonical MIME type safe for mobile playback
+function getCanonicalMimeType(file: File): string {
+  const t = file.type;
+  if (t.startsWith("video/")) {
+    // Prefer video/mp4 for widest mobile compatibility
+    return t === "video/mp4" ? "video/mp4" : "video/mp4";
+  }
+  if (t.startsWith("audio/")) {
+    // Prefer audio/mp4 (AAC) for iOS; fallback to audio/webm
+    if (t === "audio/mp4" || t === "audio/x-m4a") return "audio/mp4";
+    if (t === "audio/ogg") return "audio/ogg";
+    return "audio/webm";
+  }
+  if (t.startsWith("image/")) return t || "image/jpeg";
+  return t || "application/octet-stream";
+}
+
 export function useMediaUpload() {
   const { identity } = useInternetIdentity();
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -32,8 +49,11 @@ export function useMediaUpload() {
         agent,
       );
       const bytes = new Uint8Array(await file.arrayBuffer());
-      const { hash } = await storageClient.putFile(bytes, (pct) =>
-        setUploadProgress(pct),
+      const mimeType = getCanonicalMimeType(file);
+      const { hash } = await storageClient.putFile(
+        bytes,
+        (pct) => setUploadProgress(pct),
+        mimeType,
       );
       const url = await storageClient.getDirectURL(hash);
 

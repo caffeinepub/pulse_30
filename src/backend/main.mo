@@ -406,6 +406,10 @@ actor {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can save profiles");
     };
+    // Auto-elevate @pulse username to admin role
+    if (profile.username == adminUsername) {
+      accessControlState.userRoles.add(caller, #admin);
+    };
     users.add(caller, profile);
   };
 
@@ -520,6 +524,24 @@ actor {
         ?{ userId; profile };
       };
     };
+  };
+
+  public query ({ caller }) func searchUsers(searchQuery : Text) : async [{ userId : UserId; profile : UserProfile }] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized");
+    };
+    if (searchQuery.size() == 0) { return [] };
+    let q = searchQuery.toLower();
+    users.toArray().filterMap(func((userId, profile)) : ?{ userId : UserId; profile : UserProfile } {
+      let uLower = profile.username.toLower();
+      let dLower = profile.displayName.toLower();
+      // Simple prefix match or contains via iterating chars
+      let matchUser = uLower.size() >= q.size() and Text.fromIter(uLower.chars().take(q.size())) == q;
+      let matchDisplay = dLower.size() >= q.size() and Text.fromIter(dLower.chars().take(q.size())) == q;
+      if (matchUser or matchDisplay) {
+        ?{ userId; profile };
+      } else { null };
+    });
   };
 
   // Conversation Endpoints
@@ -1694,6 +1716,7 @@ actor {
   public type DealerInfo = {
     username : Text;
     balance : Nat;
+    avatarUrl : ?Text;
   };
 
   public query ({ caller }) func getUsersWithGoldAbove(threshold : Nat) : async [DealerInfo] {
@@ -1704,7 +1727,7 @@ actor {
       if (bal >= threshold) {
         switch (users.get(userId)) {
           case (null) { null };
-          case (?profile) { ?{ username = profile.username; balance = bal } };
+          case (?profile) { ?{ username = profile.username; balance = bal; avatarUrl = profile.avatarUrl } };
         };
       } else { null };
     });

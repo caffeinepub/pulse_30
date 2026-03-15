@@ -1,43 +1,31 @@
 # Pulse
 
 ## Current State
-Pulse is a WhatsApp-like messaging app with dark/gold UI. It has:
-- User auth, registration, profile editing
-- Direct and group conversations with voice/media messages
-- Stories tab (image/video only, 72hr expiry, like/comment)
-- Blob storage for media uploads via StorageClient
-- MIME type bug: StorageClient.putFile hardcodes `application/octet-stream` for all files, so videos/audio are served without correct MIME type, causing playback failures on mobile
+Pulse is a WhatsApp-inspired messaging app with a luxury dark UI accented in gold. It has a Motoko backend and React/TypeScript frontend. Core features are built but several critical bugs persist: admin Gold claim fails with unauthorized error, media MIME types are broken for mobile, universal search bar is missing, and transaction history labels are incorrect.
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Channels**: Users can create named channels with description and optional avatar
-- **Channel posts**: Text, image, audio recording, and video posts in channels
-- **Channel follows**: Users can follow/unfollow channels; follower count shown
-- **Channel directory**: Browsable list of all channels for discovery
-- **Post interactions**: Like, comment on channel posts; forward posts to existing conversations/groups
-- **Channels tab**: Dedicated tab in sidebar alongside Chats, Stories
+- Universal search bar (left of QR icon in chat list header): search users by username, messages within conversations, posts within channels — inline results grouped by type
+- Auto-elevate `@pulse` username to `#admin` role on first profile save
 
 ### Modify
-- **StorageClient.putFile**: Accept optional `mimeType` string param; use it as `Content-Type` in `fileHeaders` instead of hardcoded `application/octet-stream`
-- **useMediaUpload.ts**: Pass `file.type` as `mimeType` to `putFile` so correct MIME type is stored and served
+- Fix admin Gold claim: `@pulse` must be auto-elevated to `#admin` on `saveCallerUserProfile` when username matches `adminUsername`
+- Fix all media uploads: always pass correct MIME type (video/mp4, audio/webm or audio/ogg, image/jpeg etc.) in blob metadata; video elements use `muted` + `playsInline` for iOS compatibility
+- Fix transaction history display: Sent = amber with "-" prefix, Received = green, Fee Reward = gold sparkle; most recent first
+- Fix Gold claim limit: max is 9,999,999 (not 99,999.99); backend uses `goldMaxClaim = 999_999_900` (units * 100 for 2 decimal places)
+- Keep all existing features: DMs, group chats (19 msg pagination, owner badge, add/remove members), stories (72h expiry, image/video, 19/page), channels (19/page, follow, like/comment/forward), Gold wallet (5% fee, dealers 99+ Gold), blocking, profile links/QR, PWA, group avatars, sender avatars in group chats
 
 ### Remove
-- Nothing removed
+- Notification bell (already removed per user request)
 
 ## Implementation Plan
-1. Fix StorageClient to accept and propagate real MIME type
-2. Fix useMediaUpload to pass file.type to putFile
-3. Add backend types: Channel, ChannelId, ChannelPost, ChannelPostId, ChannelComment
-4. Add backend state: channels map, channelPosts map, channelFollowers map, postLikes map, channelComments map
-5. Add backend endpoints:
-   - createChannel(name, description, ?avatarUrl) -> ChannelId
-   - getAllChannels() -> [(Channel, Nat)] (channel + follower count)
-   - getChannelPosts(channelId) -> [ChannelPost]
-   - followChannel(channelId) / unfollowChannel(channelId)
-   - isFollowingChannel(channelId) -> Bool
-   - addChannelPost(channelId, content) -> ChannelPostId
-   - likeChannelPost / unlikeChannelPost
-   - commentOnChannelPost / getChannelPostComments
-   - forwardChannelPost: sends post content as a message in a given conversationId
-6. Frontend: Channels tab in sidebar, channel directory view, channel detail view, create channel modal, post composer, post card with like/comment/forward
+1. **Backend**: Regenerate Motoko with auto-admin elevation for `@pulse`, fixed Gold claim limit (9,999,999), Gold fee distribution, block system, search endpoints
+2. **DID files**: Regenerate `backend.did.js` and `backend.did.d.ts` in sync with new backend
+3. **Frontend**:
+   - Fix media upload hooks to always include correct MIME type in blob storage metadata
+   - Add universal search bar component left of QR icon in Sidebar/ChatList header
+   - Fix WalletTab transaction history display (correct labels, colors, sort order)
+   - Fix video elements: add `muted`, `playsInline`, wait for `canplay` event
+   - Ensure all Gold balance displays use 2 decimal places
+   - Keep all existing components intact

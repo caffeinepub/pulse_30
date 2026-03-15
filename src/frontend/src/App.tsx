@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import AuthScreen from "./components/AuthScreen";
 import MainLayout from "./components/MainLayout";
+import PWAInstallBanner from "./components/PWAInstallBanner";
 import ProfileSetupModal from "./components/ProfileSetupModal";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
 import { useGetCallerUserProfile } from "./hooks/useQueries";
@@ -40,9 +41,11 @@ export default function App() {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
-          <span className="font-display text-3xl gold-shimmer font-bold">
-            Pulse
-          </span>
+          <img
+            src="/assets/uploads/Photoroom_20260315_093214-1.png"
+            alt="Pulse"
+            className="w-16 h-16 object-contain"
+          />
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
       </div>
@@ -74,6 +77,7 @@ export default function App() {
           onPendingProfileHandled={handlePendingProfileHandled}
         />
       )}
+      <PWAInstallBanner />
     </>
   );
 }

@@ -1,0 +1,17 @@
+{
+  "name": "Pulse",
+  "short_name": "Pulse",
+  "description": "Luxury messaging with Gold",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#b8860b",
+  "icons": [
+    {
+      "src": "/assets/uploads/Photoroom_20260315_093214-1.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

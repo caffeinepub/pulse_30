@@ -30,6 +30,7 @@ import {
   useGetUserProfile,
   useListUserConversations,
   useSearchUserByUsername,
+  useSearchUsers,
 } from "../hooks/useQueries";
 import type { ChannelId } from "../hooks/useQueries";
 import { useQRScanner } from "../qr-code/useQRScanner";
@@ -425,6 +426,19 @@ export default function Sidebar({
   onLogout,
 }: SidebarProps) {
   const [search, setSearch] = useState("");
+  const [universalSearchActive, setUniversalSearchActive] = useState(false);
+  const [universalQuery, setUniversalQuery] = useState("");
+  const [userSearchResults, setUserSearchResults] = useState<
+    Array<{
+      userId: string;
+      username: string;
+      displayName: string;
+      avatarUrl?: string;
+    }>
+  >([]);
+  const [msgSearchResults, setMsgSearchResults] = useState<
+    Array<{ convId: string; convName: string; msgText: string }>
+  >([]);
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("chats");
@@ -438,6 +452,7 @@ export default function Sidebar({
   const { data: conversations, isLoading } = useListUserConversations();
   const { data: groupAvatarsData } = useGetGroupAvatars();
   const { mutateAsync: searchUser } = useSearchUserByUsername();
+  const { mutateAsync: searchUsers } = useSearchUsers();
   const { mutateAsync: createDirectConversation } =
     useCreateDirectConversation();
 
@@ -507,12 +522,105 @@ export default function Sidebar({
       <div className="px-4 pt-5 pb-3 border-b border-border shrink-0">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <span className="font-display text-2xl font-bold gold-shimmer">
+            <img
+              src="/assets/uploads/Photoroom_20260315_093214-1.png"
+              alt="Pulse"
+              className="w-8 h-8 object-contain rounded-lg"
+            />
+            <span className="font-display text-xl font-bold gold-shimmer">
               Pulse
             </span>
           </div>
           <div className="flex items-center gap-1">
-            {activeTab === "chats" && (
+            {/* Universal Search - always visible */}
+            {universalSearchActive ? (
+              <div className="flex items-center gap-1">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    data-ocid="sidebar.universal_search.input"
+                    autoFocus
+                    value={universalQuery}
+                    onChange={async (e) => {
+                      const q = e.target.value;
+                      setUniversalQuery(q);
+                      if (q.trim().length >= 1) {
+                        // Search users
+                        try {
+                          const users = await searchUsers(q.trim());
+                          setUserSearchResults(
+                            (users as any[]).slice(0, 5).map((u: any) => ({
+                              userId: u.userId?.toString() ?? "",
+                              username: u.profile?.username ?? "",
+                              displayName: u.profile?.displayName ?? "",
+                              avatarUrl: u.profile?.avatarUrl?.[0] ?? undefined,
+                            })),
+                          );
+                        } catch {
+                          setUserSearchResults([]);
+                        }
+                        // Search messages in loaded conversations
+                        const qLow = q.toLowerCase();
+                        const msgResults: Array<{
+                          convId: string;
+                          convName: string;
+                          msgText: string;
+                        }> = [];
+                        for (const conv of conversations ?? []) {
+                          const name =
+                            conv.type.__kind__ === "group"
+                              ? (conv.type as any).group
+                              : "Direct";
+                          for (const msg of conv.messages.slice(-50)) {
+                            if (msg.content.text.toLowerCase().includes(qLow)) {
+                              msgResults.push({
+                                convId: conv.id.toString(),
+                                convName: name,
+                                msgText: msg.content.text.slice(0, 60),
+                              });
+                              break;
+                            }
+                          }
+                          if (msgResults.length >= 5) break;
+                        }
+                        setMsgSearchResults(msgResults);
+                      } else {
+                        setUserSearchResults([]);
+                        setMsgSearchResults([]);
+                      }
+                    }}
+                    placeholder="Search..."
+                    className="pl-7 h-8 w-40 sm:w-52 text-xs bg-input border-border rounded-lg"
+                  />
+                </div>
+                <Button
+                  data-ocid="sidebar.universal_search.close_button"
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => {
+                    setUniversalSearchActive(false);
+                    setUniversalQuery("");
+                    setUserSearchResults([]);
+                    setMsgSearchResults([]);
+                  }}
+                  className="h-8 w-8 rounded-xl hover:bg-muted"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                data-ocid="sidebar.universal_search_button"
+                size="icon"
+                variant="ghost"
+                onClick={() => setUniversalSearchActive(true)}
+                className="h-9 w-9 rounded-xl hover:bg-muted"
+                aria-label="Search"
+              >
+                <Search className="h-4 w-4" />
+              </Button>
+            )}
+            {activeTab === "chats" && !universalSearchActive && (
               <>
                 <Button
                   data-ocid="sidebar.scan_qr_button"
@@ -659,20 +767,127 @@ export default function Sidebar({
         </Tabs>
       </div>
 
+      {/* Universal Search Results */}
+      {universalSearchActive && universalQuery.trim().length > 0 && (
+        <div className="flex-1 overflow-y-auto scrollbar-thin px-2 pt-2">
+          {userSearchResults.length > 0 && (
+            <div className="mb-3">
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-1">
+                People
+              </div>
+              {userSearchResults.map((u, i) => (
+                <button
+                  type="button"
+                  key={u.userId ?? i}
+                  data-ocid={`sidebar.search.user.${i + 1}`}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-muted/60 transition-colors text-left mb-1"
+                  onClick={async () => {
+                    try {
+                      const result = await searchUser(u.username);
+                      if (result) {
+                        const convId = await createDirectConversation(
+                          result.userId,
+                        );
+                        setUniversalSearchActive(false);
+                        setUniversalQuery("");
+                        setUserSearchResults([]);
+                        setMsgSearchResults([]);
+                        setActiveTab("chats");
+                        onSelectConversation(convId);
+                      }
+                    } catch {}
+                  }}
+                >
+                  <Avatar className="w-9 h-9 shrink-0">
+                    {u.avatarUrl ? (
+                      <AvatarImage src={u.avatarUrl} alt={u.displayName} />
+                    ) : null}
+                    <AvatarFallback
+                      className="text-xs font-semibold"
+                      style={{
+                        background: "oklch(0.76 0.13 72 / 0.2)",
+                        color: "oklch(0.82 0.15 72)",
+                      }}
+                    >
+                      {u.displayName
+                        ? u.displayName.slice(0, 2).toUpperCase()
+                        : u.username.slice(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-foreground truncate">
+                      {u.displayName}
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      @{u.username}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          {msgSearchResults.length > 0 && (
+            <div className="mb-3">
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-1">
+                Messages
+              </div>
+              {msgSearchResults.map((m, i) => (
+                <button
+                  type="button"
+                  key={m.convId ?? i}
+                  data-ocid={`sidebar.search.message.${i + 1}`}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-muted/60 transition-colors text-left mb-1"
+                  onClick={() => {
+                    setUniversalSearchActive(false);
+                    setUniversalQuery("");
+                    setUserSearchResults([]);
+                    setMsgSearchResults([]);
+                    onSelectConversation(BigInt(m.convId));
+                  }}
+                >
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                    style={{ background: "oklch(0.18 0.04 55)" }}
+                  >
+                    <MessageCircle className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-foreground truncate">
+                      {m.convName}
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {m.msgText}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          {userSearchResults.length === 0 && msgSearchResults.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+              <Search className="h-8 w-8 mb-2 opacity-30" />
+              <p className="text-sm">
+                No results for &quot;{universalQuery}&quot;
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Content area */}
-      {activeTab === "status" ? (
+      {!universalSearchActive && activeTab === "status" ? (
         <StatusView
           currentUserId={currentUserId}
           currentProfile={currentProfile}
           onStartChat={onStartChat}
         />
-      ) : activeTab === "channels" ? (
+      ) : !universalSearchActive && activeTab === "channels" ? (
         <ChannelsTab
           currentUserId={currentUserId}
           onSelectChannel={onSelectChannel}
           onAvatarClick={handleChannelAvatarClick}
         />
-      ) : activeTab === "wallet" ? (
+      ) : !universalSearchActive && activeTab === "wallet" ? (
         <div className="flex-1 overflow-y-auto scrollbar-thin">
           <WalletTab
             currentUsername={currentProfile?.username ?? ""}

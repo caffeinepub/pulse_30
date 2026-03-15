@@ -72,14 +72,19 @@ export default function AuthScreen() {
           className="flex flex-col items-center gap-3"
         >
           <div
-            className="w-20 h-20 rounded-2xl flex items-center justify-center"
+            className="w-20 h-20 rounded-2xl flex items-center justify-center overflow-hidden"
             style={{
               background:
-                "linear-gradient(135deg, oklch(0.76 0.13 72), oklch(0.65 0.11 65))",
+                "linear-gradient(135deg, oklch(0.76 0.13 72 / 0.15), oklch(0.65 0.11 65 / 0.1))",
               boxShadow: "0 0 40px oklch(0.76 0.13 72 / 0.4)",
+              border: "1px solid oklch(0.76 0.13 72 / 0.3)",
             }}
           >
-            <MessageCircle className="w-10 h-10 text-primary-foreground" />
+            <img
+              src="/assets/uploads/Photoroom_20260315_093214-1.png"
+              alt="Pulse"
+              className="w-16 h-16 object-contain"
+            />
           </div>
           <h1 className="font-display text-6xl font-bold gold-shimmer">
             Pulse

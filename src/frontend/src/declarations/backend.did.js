@@ -180,6 +180,7 @@ export const StatusInteractions = IDL.Record({
 export const DealerInfo = IDL.Record({
   'username' : IDL.Text,
   'balance' : IDL.Nat,
+  'avatarUrl' : IDL.Opt(IDL.Text),
 });
 export const MessageInput = IDL.Record({ 'content' : MessageContent });
 
@@ -334,6 +335,11 @@ export const idlService = IDL.Service({
       [IDL.Text],
       [IDL.Opt(IDL.Record({ 'userId' : UserId, 'profile' : UserProfile }))],
       [],
+    ),
+  'searchUsers' : IDL.Func(
+      [IDL.Text],
+      [IDL.Vec(IDL.Record({ 'userId' : UserId, 'profile' : UserProfile }))],
+      ['query'],
     ),
   'sendMessage' : IDL.Func([ConversationId, MessageInput], [MessageId], []),
   'transferGold' : IDL.Func([IDL.Text, IDL.Nat], [], []),
@@ -532,7 +538,7 @@ export const idlFactory = ({ IDL }) => {
     'comments' : IDL.Vec(StatusCommentWithProfile),
     'likedByMe' : IDL.Bool,
   });
-  const DealerInfo = IDL.Record({ 'username' : IDL.Text, 'balance' : IDL.Nat });
+  const DealerInfo = IDL.Record({ 'username' : IDL.Text, 'balance' : IDL.Nat, 'avatarUrl' : IDL.Opt(IDL.Text) });
   const MessageInput = IDL.Record({ 'content' : MessageContent });
   
   return IDL.Service({
@@ -694,6 +700,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Text],
         [IDL.Opt(IDL.Record({ 'userId' : UserId, 'profile' : UserProfile }))],
         [],
+      ),
+    'searchUsers' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(IDL.Record({ 'userId' : UserId, 'profile' : UserProfile }))],
+        ['query'],
       ),
     'sendMessage' : IDL.Func([ConversationId, MessageInput], [MessageId], []),
     'transferGold' : IDL.Func([IDL.Text, IDL.Nat], [], []),

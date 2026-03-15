@@ -175,6 +175,7 @@ export type ChannelCommentId = bigint;
 export interface DealerInfo {
     username: string;
     balance: bigint;
+    avatarUrl?: string;
 }
 export type CommentId = bigint;
 export interface StatusContent {
@@ -357,6 +358,7 @@ export interface backendInterface {
     requestBuyGold(amount: bigint): Promise<void>;
     requestSellGold(amount: bigint): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
+    searchUsers(query: string): Promise<Array<{ userId: UserId; profile: UserProfile }>>;
     searchUserByUsername(username: string): Promise<{
         userId: UserId;
         profile: UserProfile;
@@ -1243,6 +1245,23 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.saveCallerUserProfile(to_candid_UserProfile_n74(this._uploadFile, this._downloadFile, arg0));
+            return result;
+        }
+    }
+    async searchUsers(arg0: string): Promise<Array<{
+        userId: UserId;
+        profile: UserProfile;
+    }>> {
+        if (this.processError) {
+            try {
+                const result = await (this.actor as any).searchUsers(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error('unreachable');
+            }
+        } else {
+            const result = await (this.actor as any).searchUsers(arg0);
             return result;
         }
     }

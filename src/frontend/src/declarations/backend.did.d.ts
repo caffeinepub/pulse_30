@@ -67,7 +67,7 @@ export interface Conversation {
 export type ConversationId = bigint;
 export type ConversationType = { 'group' : string } |
   { 'direct' : null };
-export interface DealerInfo { 'username' : string, 'balance' : bigint }
+export interface DealerInfo { 'username' : string, 'balance' : bigint, 'avatarUrl' : [] | [string] }
 export interface GoldTransaction {
   'id' : GoldTxId,
   'timestamp' : Timestamp,
@@ -268,6 +268,7 @@ export interface _SERVICE {
     [string],
     [] | [{ 'userId' : UserId, 'profile' : UserProfile }]
   >,
+  'searchUsers' : ActorMethod<[string], Array<{ 'userId' : UserId, 'profile' : UserProfile }>>,
   'sendMessage' : ActorMethod<[ConversationId, MessageInput], MessageId>,
   'transferGold' : ActorMethod<[string, bigint], undefined>,
   'unblockUser' : ActorMethod<[UserId], undefined>,
