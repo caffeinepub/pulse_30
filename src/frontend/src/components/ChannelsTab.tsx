@@ -12,6 +12,8 @@ import {
 import type { ChannelId, ChannelWithMeta } from "../hooks/useQueries";
 import CreateChannelModal from "./CreateChannelModal";
 
+const PAGE_SIZE = 19;
+
 function getInitials(name: string) {
   return name
     .split(" ")
@@ -25,11 +27,13 @@ function ChannelCard({
   meta,
   currentUserId,
   onSelect,
+  onAvatarClick,
   index,
 }: {
   meta: ChannelWithMeta;
   currentUserId: string;
   onSelect: (id: ChannelId) => void;
+  onAvatarClick: (userId: string) => void;
   index: number;
 }) {
   const { channel, followerCount, isFollowing } = meta;
@@ -47,6 +51,11 @@ function ChannelCard({
     }
   };
 
+  const handleAvatarClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onAvatarClick(channel.owner.toString());
+  };
+
   return (
     <button
       type="button"
@@ -54,22 +63,30 @@ function ChannelCard({
       onClick={() => onSelect(channel.id)}
       className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors text-left border-b border-border/30 last:border-0"
     >
-      <Avatar className="w-12 h-12 shrink-0">
-        {channel.avatarUrl && (
-          <AvatarImage src={channel.avatarUrl} alt={channel.name} />
-        )}
-        <AvatarFallback
-          className="text-base font-bold"
-          style={{
-            background:
-              "linear-gradient(135deg, oklch(0.76 0.13 72 / 0.25), oklch(0.65 0.11 65 / 0.15))",
-            color: "oklch(0.82 0.15 72)",
-            border: "1.5px solid oklch(0.76 0.13 72 / 0.3)",
-          }}
-        >
-          {getInitials(channel.name)}
-        </AvatarFallback>
-      </Avatar>
+      <button
+        type="button"
+        aria-label={`View ${channel.name} creator profile`}
+        onClick={handleAvatarClick}
+        className="rounded-full focus:outline-none focus:ring-2 shrink-0"
+        style={{ focusRingColor: "oklch(0.82 0.15 72)" } as React.CSSProperties}
+      >
+        <Avatar className="w-12 h-12">
+          {channel.avatarUrl && (
+            <AvatarImage src={channel.avatarUrl} alt={channel.name} />
+          )}
+          <AvatarFallback
+            className="text-base font-bold"
+            style={{
+              background:
+                "linear-gradient(135deg, oklch(0.76 0.13 72 / 0.25), oklch(0.65 0.11 65 / 0.15))",
+              color: "oklch(0.82 0.15 72)",
+              border: "1.5px solid oklch(0.76 0.13 72 / 0.3)",
+            }}
+          >
+            {getInitials(channel.name)}
+          </AvatarFallback>
+        </Avatar>
+      </button>
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 mb-0.5">
@@ -128,20 +145,31 @@ function ChannelCard({
 interface ChannelsTabProps {
   currentUserId: string;
   onSelectChannel: (id: ChannelId) => void;
+  onAvatarClick: (userId: string) => void;
 }
 
 export default function ChannelsTab({
   currentUserId,
   onSelectChannel,
+  onAvatarClick,
 }: ChannelsTabProps) {
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [page, setPage] = useState(1);
   const { data: channels = [], isLoading } = useGetAllChannels();
 
   const filtered = channels.filter((c) => {
     if (!search.trim()) return true;
     return c.channel.name.toLowerCase().includes(search.toLowerCase());
   });
+
+  const visibleChannels = filtered.slice(0, page * PAGE_SIZE);
+  const hasMore = filtered.length > page * PAGE_SIZE;
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearch(e.target.value);
+    setPage(1);
+  };
 
   const handleCreated = (channelId: bigint) => {
     onSelectChannel(channelId as ChannelId);
@@ -181,7 +209,7 @@ export default function ChannelsTab({
             data-ocid="channels.search_input"
             placeholder="Search channels..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={handleSearchChange}
             className="pl-9 bg-input border-border h-8 text-sm"
           />
         </div>
@@ -229,15 +257,28 @@ export default function ChannelsTab({
           </div>
         ) : (
           <div data-ocid="channels.list">
-            {filtered.map((meta, idx) => (
+            {visibleChannels.map((meta, idx) => (
               <ChannelCard
                 key={meta.channel.id.toString()}
                 meta={meta}
                 currentUserId={currentUserId}
                 onSelect={onSelectChannel}
+                onAvatarClick={onAvatarClick}
                 index={idx}
               />
             ))}
+            {hasMore && (
+              <button
+                type="button"
+                data-ocid="channels.pagination_next"
+                onClick={() => setPage((p) => p + 1)}
+                className="w-full py-3 text-xs font-semibold text-center transition-colors hover:bg-muted/30"
+                style={{ color: "oklch(0.82 0.15 72)" }}
+              >
+                Show {Math.min(PAGE_SIZE, filtered.length - page * PAGE_SIZE)}{" "}
+                more
+              </button>
+            )}
           </div>
         )}
       </div>

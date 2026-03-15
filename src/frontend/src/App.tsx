@@ -1,6 +1,6 @@
 import { Toaster } from "@/components/ui/sonner";
 import { Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import AuthScreen from "./components/AuthScreen";
 import MainLayout from "./components/MainLayout";
 import ProfileSetupModal from "./components/ProfileSetupModal";
@@ -19,9 +19,22 @@ export default function App() {
   const showProfileSetup = isAuthenticated && isFetched && profile === null;
   const showMain = isAuthenticated && isFetched && profile !== null;
 
+  // Parse pending profile username from URL path like /profile/:username
+  const [pendingProfileUsername, setPendingProfileUsername] = useState<
+    string | null
+  >(() => {
+    const match = window.location.pathname.match(/^\/profile\/([^/]+)$/);
+    return match ? decodeURIComponent(match[1]) : null;
+  });
+
   useEffect(() => {
     document.documentElement.classList.add("dark");
   }, []);
+
+  const handlePendingProfileHandled = () => {
+    setPendingProfileUsername(null);
+    window.history.replaceState({}, "", "/");
+  };
 
   if (isInitializing || (isAuthenticated && profileLoading && !isFetched)) {
     return (
@@ -55,7 +68,12 @@ export default function App() {
         </div>
       )}
       {showProfileSetup && <ProfileSetupModal />}
-      {showMain && <MainLayout />}
+      {showMain && (
+        <MainLayout
+          pendingProfileUsername={pendingProfileUsername}
+          onPendingProfileHandled={handlePendingProfileHandled}
+        />
+      )}
     </>
   );
 }

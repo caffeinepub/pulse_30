@@ -32,11 +32,8 @@ export function useMediaUpload() {
         agent,
       );
       const bytes = new Uint8Array(await file.arrayBuffer());
-      // Pass the actual MIME type so the storage gateway serves the correct Content-Type
-      const { hash } = await storageClient.putFile(
-        bytes,
-        (pct) => setUploadProgress(pct),
-        file.type || "application/octet-stream",
+      const { hash } = await storageClient.putFile(bytes, (pct) =>
+        setUploadProgress(pct),
       );
       const url = await storageClient.getDirectURL(hash);
 

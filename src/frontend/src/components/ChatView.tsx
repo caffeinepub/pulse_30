@@ -1,31 +1,78 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   ArrowLeft,
+  Camera,
   Check,
   CheckCheck,
+  Coins,
+  Edit,
   Image as ImageIcon,
+  Loader2,
   Mic,
+  MoreVertical,
   Paperclip,
   Send,
+  Share2,
+  Shield,
+  ShieldOff,
   Square,
+  UserMinus,
+  UserPlus,
   Video,
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { ConversationId, MediaType, Message } from "../backend";
+import { useActor } from "../hooks/useActor";
 import { useMediaUpload } from "../hooks/useMediaUpload";
 import {
+  useAddGroupMember,
+  useBlockUser,
+  useGetGroupAvatars,
+  useGetGroupCreators,
   useGetMessages,
+  useGetMyBlockedUsers,
+  useGetMyGoldBalance,
   useGetUserProfile,
   useIsUserOnline,
+  useLeaveConversation,
   useListUserConversations,
   useMarkMessagesAsRead,
+  useRemoveGroupMember,
   useSendMessage,
+  useTransferGold,
+  useUnblockUser,
+  useUpdateGroupAvatar,
 } from "../hooks/useQueries";
 import UserProfileModal from "./UserProfileModal";
 
@@ -118,13 +165,15 @@ function MediaMessage({ url, mediaType, onImageClick }: MediaMessageProps) {
     return (
       // biome-ignore lint/a11y/useMediaCaption: user-uploaded video, captions unavailable
       <video
-        src={url}
         controls
         muted
         playsInline
+        preload="metadata"
         className="max-w-[240px] max-h-[240px] rounded-lg mt-1"
         style={{ display: "block" }}
-      />
+      >
+        <source src={url} type="video/mp4" />
+      </video>
     );
   }
   if (mediaType.__kind__ === "audio") {
@@ -150,6 +199,147 @@ function MediaMessage({ url, mediaType, onImageClick }: MediaMessageProps) {
   );
 }
 
+function ForwardMessagePicker({
+  conversations,
+  currentUserId,
+  onSelect,
+}: {
+  conversations: any[];
+  currentUserId: string;
+  onSelect: (convId: any) => void;
+}) {
+  return (
+    <ScrollArea className="max-h-72">
+      {conversations.length === 0 ? (
+        <p className="text-center text-sm text-muted-foreground py-8">
+          No conversations
+        </p>
+      ) : (
+        conversations.map((conv) => {
+          const isGroupConv = conv.type.__kind__ === "group";
+          const convName = isGroupConv ? (conv.type as any).group : null;
+          return (
+            <ForwardConvRow
+              key={conv.id.toString()}
+              conversation={conv}
+              convName={convName}
+              currentUserId={currentUserId}
+              isGroupConv={isGroupConv}
+              onSelect={() => onSelect(conv.id)}
+            />
+          );
+        })
+      )}
+    </ScrollArea>
+  );
+}
+
+function ForwardConvRow({
+  conversation,
+  convName,
+  currentUserId,
+  isGroupConv,
+  onSelect,
+}: {
+  conversation: any;
+  convName: string | null;
+  currentUserId: string;
+  isGroupConv: boolean;
+  onSelect: () => void;
+}) {
+  const otherUserId = isGroupConv
+    ? null
+    : (conversation.members
+        .find((m: any) => m.toString() !== currentUserId)
+        ?.toString() ?? null);
+  const { data: otherProfile } = useGetUserProfile(otherUserId);
+  const displayName =
+    convName ?? otherProfile?.displayName ?? otherUserId?.slice(0, 8) ?? "Chat";
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted/50 transition-colors text-left"
+    >
+      <Avatar className="w-9 h-9 shrink-0">
+        {otherProfile?.avatarUrl && (
+          <AvatarImage src={otherProfile.avatarUrl} alt={displayName} />
+        )}
+        <AvatarFallback
+          className="text-xs"
+          style={{
+            background: "oklch(0.76 0.13 72 / 0.2)",
+            color: "oklch(0.82 0.15 72)",
+          }}
+        >
+          {getInitials(displayName)}
+        </AvatarFallback>
+      </Avatar>
+      <span className="text-sm text-foreground truncate">{displayName}</span>
+    </button>
+  );
+}
+
+function MemberRow({
+  memberId,
+  isMe,
+  isOwner,
+  index,
+  onRemove,
+}: {
+  memberId: string;
+  isMe: boolean;
+  isOwner: boolean;
+  index: number;
+  onRemove: () => void;
+}) {
+  const { data: profile } = useGetUserProfile(memberId);
+  const displayName = profile?.displayName ?? memberId.slice(0, 8);
+  return (
+    <div className="flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-muted/30 transition-colors">
+      <Avatar className="w-7 h-7 shrink-0">
+        <AvatarImage src={profile?.avatarUrl} alt={displayName} />
+        <AvatarFallback
+          className="text-xs"
+          style={{
+            background: "oklch(0.76 0.13 72 / 0.2)",
+            color: "oklch(0.82 0.15 72)",
+          }}
+        >
+          {getInitials(displayName)}
+        </AvatarFallback>
+      </Avatar>
+      <span className="text-sm flex-1 truncate text-foreground">
+        {displayName}
+      </span>
+      {isOwner && (
+        <span
+          className="text-xs font-semibold px-1.5 py-0.5 rounded-md ml-1"
+          style={{
+            color: "oklch(0.82 0.15 72)",
+            background: "oklch(0.82 0.15 72 / 0.12)",
+          }}
+        >
+          Owner
+        </span>
+      )}
+      {isMe ? (
+        <span className="text-xs text-muted-foreground">You</span>
+      ) : (
+        <Button
+          data-ocid={`chat.remove_member.button.${index + 1}`}
+          size="sm"
+          variant="ghost"
+          className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+          onClick={onRemove}
+        >
+          <UserMinus className="h-3.5 w-3.5" />
+        </Button>
+      )}
+    </div>
+  );
+}
+
 interface MessageBubbleProps {
   message: Message;
   currentUserId: string;
@@ -157,6 +347,12 @@ interface MessageBubbleProps {
   isGroup: boolean;
   showSender: boolean;
   onImageClick: (url: string) => void;
+  onSenderClick?: (principalId: string) => void;
+  onForward?: (content: {
+    text: string;
+    mediaUrl?: string;
+    mediaType?: string;
+  }) => void;
   index: number;
 }
 
@@ -167,6 +363,8 @@ function MessageBubble({
   isGroup,
   showSender,
   onImageClick,
+  onSenderClick,
+  onForward,
   index,
 }: MessageBubbleProps) {
   const isSent = message.sender.toString() === currentUserId;
@@ -174,12 +372,15 @@ function MessageBubble({
   const { data: senderProfile } = useGetUserProfile(
     isGroup && !isSent ? senderId : null,
   );
+  const [hovered, setHovered] = useState(false);
 
   const senderName = senderProfile?.displayName ?? senderId.slice(0, 8);
 
   return (
     <motion.div
       data-ocid={`chat.message.${index + 1}`}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
@@ -188,7 +389,11 @@ function MessageBubble({
       } mb-1`}
     >
       {!isSent && isGroup && (
-        <Avatar className="w-7 h-7 shrink-0 mb-0.5">
+        <Avatar
+          className="w-7 h-7 shrink-0 mb-0.5 cursor-pointer"
+          onClick={() => onSenderClick?.(senderId)}
+        >
+          <AvatarImage src={senderProfile?.avatarUrl} alt={senderName} />
           <AvatarFallback
             className="text-xs font-semibold"
             style={{
@@ -248,6 +453,27 @@ function MessageBubble({
             />
           </div>
         </div>
+        {/* Forward button on hover */}
+        {hovered && onForward && (
+          <button
+            type="button"
+            data-ocid="chat.message.forward_button"
+            onClick={() =>
+              onForward({
+                text: message.content.text ?? "",
+                mediaUrl: message.content.mediaUrl ?? undefined,
+                mediaType: message.content.mediaType
+                  ? ((message.content.mediaType as any).__kind__ ??
+                    Object.keys(message.content.mediaType as any)[0])
+                  : undefined,
+              })
+            }
+            className="p-1.5 rounded-lg hover:bg-muted/60 transition-colors text-muted-foreground hover:text-foreground shrink-0 self-center"
+            aria-label="Forward message"
+          >
+            <Share2 className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
     </motion.div>
   );
@@ -275,6 +501,28 @@ export default function ChatView({
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [senderProfileId, setSenderProfileId] = useState<string | null>(null);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [editGroupOpen, setEditGroupOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [groupAvatarPreview, setGroupAvatarPreview] = useState<string | null>(
+    null,
+  );
+  const groupAvatarInputRef = useRef<HTMLInputElement>(null);
+  const headerAvatarInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [giftGoldOpen, setGiftGoldOpen] = useState(false);
+  const [giftAmount, setGiftAmount] = useState("");
+  const [giftError, setGiftError] = useState("");
+  const [forwardMsgOpen, setForwardMsgOpen] = useState(false);
+  const [forwardMsgContent, setForwardMsgContent] = useState<{
+    text: string;
+    mediaUrl?: string;
+    mediaType?: string;
+  } | null>(null);
+  const [addMemberInput, setAddMemberInput] = useState("");
+  const [visibleMsgCount, setVisibleMsgCount] = useState(19);
+  const [addMemberError, setAddMemberError] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -288,6 +536,53 @@ export default function ChatView({
   const { mutateAsync: sendMessage, isPending: sending } = useSendMessage();
   const { mutate: markRead } = useMarkMessagesAsRead();
   const { uploadMedia, uploadProgress, isUploading } = useMediaUpload();
+  const { mutateAsync: leaveConversation, isPending: leaving } =
+    useLeaveConversation();
+  const { mutateAsync: updateGroupAvatar } = useUpdateGroupAvatar();
+  const transferGold = useTransferGold();
+  const { data: myGoldBalance } = useGetMyGoldBalance();
+  const { data: blockedUsers = [] } = useGetMyBlockedUsers();
+  const { mutate: blockUser, isPending: blocking } = useBlockUser();
+  const { mutate: unblockUser, isPending: unblocking } = useUnblockUser();
+  const { data: groupAvatarsData } = useGetGroupAvatars();
+  const { data: groupCreators } = useGetGroupCreators();
+  const addGroupMember = useAddGroupMember();
+  const removeGroupMember = useRemoveGroupMember();
+  const groupAvatarMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const [id, url] of groupAvatarsData ?? []) {
+      m.set(id.toString(), url);
+    }
+    return m;
+  }, [groupAvatarsData]);
+  const groupAvatarUrl = conversationId
+    ? groupAvatarMap.get(conversationId.toString())
+    : undefined;
+  const { actor } = useActor();
+  const isGroupOwner = !!groupCreators?.find(
+    ([cid, creatorId]) =>
+      cid.toString() === conversationId?.toString() &&
+      creatorId.toString() === currentUserId,
+  );
+
+  const groupOwnerId =
+    groupCreators
+      ?.find(([cid]) => cid.toString() === conversationId?.toString())?.[1]
+      ?.toString() ?? null;
+  async function handleAddMember() {
+    if (!addMemberInput.trim() || !conversationId) return;
+    try {
+      await addGroupMember.mutateAsync({
+        conversationId,
+        username: addMemberInput.trim(),
+      });
+      toast.success(`Added @${addMemberInput.trim()}`);
+      setAddMemberInput("");
+      setAddMemberError("");
+    } catch (e: any) {
+      setAddMemberError(e?.message ?? "Failed to add member");
+    }
+  }
 
   const conversation = conversations?.find((c) => c.id === conversationId);
   const isGroup = conversation?.type.__kind__ === "group";
@@ -303,6 +598,9 @@ export default function ChatView({
 
   const { data: otherProfile } = useGetUserProfile(otherUserId);
   const { data: isOnline } = useIsUserOnline(otherUserId);
+  const isBlocked = otherProfile
+    ? blockedUsers.some((u) => u.username === otherProfile.username)
+    : false;
 
   const chatName = isGroup
     ? (groupName ?? "Group")
@@ -325,6 +623,7 @@ export default function ChatView({
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on conversation change
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "instant" });
+    setVisibleMsgCount(19);
   }, [conversationId]);
 
   // Clean up timer on unmount
@@ -355,6 +654,28 @@ export default function ChatView({
     setPendingFilePreview(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, [pendingFilePreview]);
+
+  const handleGiftGold = async () => {
+    const amt = Number.parseFloat(giftAmount);
+    if (!amt || amt < 0.01) {
+      setGiftError("Minimum gift amount is 0.01 Gold");
+      return;
+    }
+    const recipientUsername = otherProfile?.username;
+    if (!recipientUsername) return;
+    try {
+      await transferGold.mutateAsync({
+        toUsername: recipientUsername,
+        amount: BigInt(Math.round(amt * 100)),
+      });
+      toast.success(`Sent ✦ ${amt.toFixed(2)} Gold to ${recipientUsername}`);
+      setGiftGoldOpen(false);
+      setGiftAmount("");
+      setGiftError("");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Transfer failed");
+    }
+  };
 
   const handleSend = async () => {
     if (!text.trim() && !pendingFile) return;
@@ -515,31 +836,70 @@ export default function ChatView({
           <ArrowLeft className="h-5 w-5" />
         </Button>
 
-        <button
-          type="button"
-          onClick={handleAvatarClick}
-          className={
-            !isGroup && otherUserId ? "cursor-pointer" : "cursor-default"
-          }
-          aria-label={!isGroup ? "View profile" : undefined}
-        >
-          <Avatar className="w-10 h-10">
-            {otherProfile?.avatarUrl && (
-              <AvatarImage src={otherProfile.avatarUrl} alt={chatName} />
-            )}
-            <AvatarFallback
-              className="text-sm font-semibold"
-              style={{
-                background:
-                  "linear-gradient(135deg, oklch(0.76 0.13 72 / 0.3), oklch(0.65 0.11 65 / 0.2))",
-                color: "oklch(0.82 0.15 72)",
-                border: "1px solid oklch(0.76 0.13 72 / 0.3)",
-              }}
-            >
-              {getInitials(chatName)}
-            </AvatarFallback>
-          </Avatar>
-        </button>
+        <div className="relative group/avatar">
+          <button
+            type="button"
+            onClick={isGroup ? undefined : handleAvatarClick}
+            className={
+              !isGroup && otherUserId ? "cursor-pointer" : "cursor-default"
+            }
+            aria-label={!isGroup ? "View profile" : undefined}
+          >
+            <Avatar className="w-10 h-10">
+              {isGroup && groupAvatarUrl ? (
+                <AvatarImage src={groupAvatarUrl} alt={chatName} />
+              ) : !isGroup && otherProfile?.avatarUrl ? (
+                <AvatarImage src={otherProfile.avatarUrl} alt={chatName} />
+              ) : null}
+              <AvatarFallback
+                className="text-sm font-semibold"
+                style={{
+                  background:
+                    "linear-gradient(135deg, oklch(0.76 0.13 72 / 0.3), oklch(0.65 0.11 65 / 0.2))",
+                  color: "oklch(0.82 0.15 72)",
+                  border: "1px solid oklch(0.76 0.13 72 / 0.3)",
+                }}
+              >
+                {getInitials(chatName)}
+              </AvatarFallback>
+            </Avatar>
+          </button>
+          {isGroup && (
+            <>
+              <button
+                type="button"
+                data-ocid="chat.group_avatar_upload_button"
+                onClick={() => headerAvatarInputRef.current?.click()}
+                disabled={isUploadingAvatar}
+                className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover/avatar:opacity-100 transition-opacity cursor-pointer"
+                aria-label="Update group avatar"
+              >
+                <Camera className="w-4 h-4 text-white" />
+              </button>
+              <input
+                ref={headerAvatarInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file || !conversationId) return;
+                  setIsUploadingAvatar(true);
+                  try {
+                    const { url } = await uploadMedia(file);
+                    await updateGroupAvatar({ conversationId, avatarUrl: url });
+                    toast.success("Group avatar updated");
+                  } catch {
+                    toast.error("Failed to update group avatar");
+                  } finally {
+                    setIsUploadingAvatar(false);
+                    e.target.value = "";
+                  }
+                }}
+              />
+            </>
+          )}
+        </div>
 
         <div className="flex-1 min-w-0">
           <h2 className="font-semibold text-sm text-foreground truncate">
@@ -573,6 +933,289 @@ export default function ChatView({
             </p>
           )}
         </div>
+
+        {/* Three-dot menu */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-9 w-9 rounded-xl hover:bg-muted shrink-0"
+              data-ocid="chat.open_modal_button"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="bg-card border-border">
+            {isGroup && (
+              <DropdownMenuItem
+                onClick={() => {
+                  setNewGroupName(groupName ?? "");
+                  setEditGroupOpen(true);
+                }}
+                className="cursor-pointer"
+                data-ocid="chat.edit_button"
+              >
+                <Edit className="h-4 w-4 mr-2" />
+                Edit Group
+              </DropdownMenuItem>
+            )}
+            {!isGroup && otherUserId && (
+              <DropdownMenuItem
+                onClick={() => {
+                  if (isBlocked) {
+                    unblockUser(otherUserId);
+                  } else {
+                    blockUser(otherUserId);
+                  }
+                }}
+                disabled={blocking || unblocking}
+                className="cursor-pointer"
+                data-ocid={
+                  isBlocked ? "chat.unblock_button" : "chat.block_button"
+                }
+              >
+                {isBlocked ? (
+                  <ShieldOff className="h-4 w-4 mr-2" />
+                ) : (
+                  <Shield className="h-4 w-4 mr-2" />
+                )}
+                {isBlocked ? "Unblock User" : "Block User"}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem
+              onClick={() => setLeaveConfirmOpen(true)}
+              className="cursor-pointer text-destructive focus:text-destructive"
+              data-ocid="chat.delete_button"
+            >
+              Leave Conversation
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Leave conversation confirmation */}
+        <AlertDialog open={leaveConfirmOpen} onOpenChange={setLeaveConfirmOpen}>
+          <AlertDialogContent className="bg-card border-border">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Leave Conversation</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to leave this conversation? You won't
+                receive new messages.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-ocid="chat.leave.cancel_button">
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                data-ocid="chat.leave.confirm_button"
+                disabled={leaving}
+                onClick={async () => {
+                  if (!conversationId) return;
+                  try {
+                    await leaveConversation(conversationId);
+                    toast.success("Left conversation");
+                    onBack();
+                  } catch {
+                    toast.error("Failed to leave conversation");
+                  }
+                }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Leave
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Edit group name dialog */}
+        <Dialog
+          open={editGroupOpen}
+          onOpenChange={(v) => {
+            setEditGroupOpen(v);
+            if (!v) setGroupAvatarPreview(null);
+          }}
+        >
+          <DialogContent className="bg-card border-border">
+            <DialogHeader>
+              <DialogTitle>Edit Group</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 pt-2">
+              {/* Group avatar picker */}
+              <div className="flex flex-col items-center gap-2">
+                <button
+                  type="button"
+                  data-ocid="chat.group.upload_button"
+                  onClick={() => groupAvatarInputRef.current?.click()}
+                  className="relative w-16 h-16 rounded-full overflow-hidden border-2 border-dashed border-primary/50 hover:border-primary transition-colors flex items-center justify-center bg-muted/30"
+                >
+                  {groupAvatarPreview || groupAvatarUrl ? (
+                    <img
+                      src={groupAvatarPreview ?? groupAvatarUrl ?? ""}
+                      alt="Group avatar"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-xs text-muted-foreground text-center px-1">
+                      Avatar
+                    </span>
+                  )}
+                  <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                    <span className="text-white text-xs">Change</span>
+                  </div>
+                </button>
+                <input
+                  ref={groupAvatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file || !conversationId) return;
+                    const preview = URL.createObjectURL(file);
+                    setGroupAvatarPreview(preview);
+                    try {
+                      const { url } = await uploadMedia(file);
+                      await updateGroupAvatar({
+                        conversationId,
+                        avatarUrl: url,
+                      });
+                      toast.success("Group avatar updated");
+                    } catch {
+                      toast.error("Failed to update avatar");
+                      setGroupAvatarPreview(null);
+                    }
+                  }}
+                />
+              </div>
+              <Input
+                data-ocid="chat.group.input"
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                placeholder="Group name"
+                className="bg-input border-border"
+              />
+              <Button
+                data-ocid="chat.group.save_button"
+                disabled={!newGroupName.trim()}
+                onClick={async () => {
+                  if (!conversationId || !newGroupName.trim() || !actor) return;
+                  try {
+                    await actor.updateGroupName(
+                      conversationId,
+                      newGroupName.trim(),
+                    );
+                    toast.success("Group name updated");
+                    setEditGroupOpen(false);
+                  } catch {
+                    toast.error("Failed to update group name");
+                  }
+                }}
+                style={{
+                  background:
+                    "linear-gradient(135deg, oklch(0.76 0.13 72), oklch(0.65 0.11 65))",
+                  color: "oklch(0.08 0.004 55)",
+                }}
+                className="rounded-xl"
+              >
+                Save
+              </Button>
+
+              {/* Manage Members — owner only */}
+              {isGroupOwner && (
+                <div
+                  data-ocid="chat.manage_members.section"
+                  className="flex flex-col gap-3 pt-2 border-t"
+                  style={{ borderColor: "oklch(0.82 0.15 72 / 0.15)" }}
+                >
+                  <div className="flex items-center gap-2">
+                    <UserPlus
+                      className="h-4 w-4"
+                      style={{ color: "oklch(0.82 0.15 72)" }}
+                    />
+                    <span
+                      className="text-sm font-semibold"
+                      style={{ color: "oklch(0.82 0.15 72)" }}
+                    >
+                      Manage Members
+                    </span>
+                  </div>
+
+                  {/* Current members */}
+                  <ScrollArea className="max-h-40">
+                    <div className="flex flex-col gap-1">
+                      {conversation?.members.map((memberId, mi) => {
+                        const mIdStr = memberId.toString();
+                        const isMe = mIdStr === currentUserId;
+                        return (
+                          <MemberRow
+                            key={mIdStr}
+                            memberId={mIdStr}
+                            isMe={isMe}
+                            isOwner={mIdStr === groupOwnerId}
+                            index={mi}
+                            onRemove={() => {
+                              if (!conversationId) return;
+                              removeGroupMember.mutate(
+                                { conversationId, memberId: mIdStr },
+                                {
+                                  onError: () =>
+                                    toast.error("Failed to remove member"),
+                                },
+                              );
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+
+                  {/* Add member */}
+                  <div className="flex gap-2">
+                    <Input
+                      data-ocid="chat.add_member.input"
+                      placeholder="Username to add..."
+                      value={addMemberInput}
+                      onChange={(e) => {
+                        setAddMemberInput(e.target.value);
+                        setAddMemberError("");
+                      }}
+                      className="bg-input border-border text-sm"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddMember();
+                        }
+                      }}
+                    />
+                    <Button
+                      data-ocid="chat.add_member.button"
+                      size="sm"
+                      disabled={
+                        !addMemberInput.trim() || addGroupMember.isPending
+                      }
+                      onClick={handleAddMember}
+                      style={{
+                        background:
+                          "linear-gradient(135deg, oklch(0.76 0.13 72), oklch(0.65 0.11 65))",
+                        color: "oklch(0.08 0.004 55)",
+                      }}
+                    >
+                      {addGroupMember.isPending ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <UserPlus className="h-3.5 w-3.5" />
+                      )}
+                    </Button>
+                  </div>
+                  {addMemberError && (
+                    <p className="text-xs text-destructive">{addMemberError}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Messages */}
@@ -585,23 +1228,48 @@ export default function ChatView({
               </p>
             </div>
           ) : (
-            messages.map((msg, idx) => {
-              const prevMsg = idx > 0 ? messages[idx - 1] : null;
-              const showSender =
-                !prevMsg || prevMsg.sender.toString() !== msg.sender.toString();
-              return (
-                <MessageBubble
-                  key={msg.id.toString()}
-                  message={msg}
-                  currentUserId={currentUserId}
-                  memberCount={memberCount}
-                  isGroup={!!isGroup}
-                  showSender={showSender}
-                  onImageClick={setLightboxUrl}
-                  index={idx}
-                />
-              );
-            })
+            <>
+              {messages.length > visibleMsgCount && (
+                <div className="flex justify-center py-2">
+                  <button
+                    data-ocid="chat.view_more_messages.button"
+                    type="button"
+                    onClick={() => setVisibleMsgCount((prev) => prev + 19)}
+                    className="text-xs px-3 py-1 rounded-full transition-colors hover:opacity-80"
+                    style={{
+                      color: "oklch(0.82 0.15 72)",
+                      background: "oklch(0.82 0.15 72 / 0.1)",
+                    }}
+                  >
+                    View more
+                  </button>
+                </div>
+              )}
+              {messages.slice(-visibleMsgCount).map((msg) => {
+                const idx = messages.indexOf(msg);
+                const prevMsg = idx > 0 ? messages[idx - 1] : null;
+                const showSender =
+                  !prevMsg ||
+                  prevMsg.sender.toString() !== msg.sender.toString();
+                return (
+                  <MessageBubble
+                    key={msg.id.toString()}
+                    message={msg}
+                    currentUserId={currentUserId}
+                    memberCount={memberCount}
+                    isGroup={!!isGroup}
+                    showSender={showSender}
+                    onImageClick={setLightboxUrl}
+                    onSenderClick={(id) => setSenderProfileId(id)}
+                    onForward={(msgContent) => {
+                      setForwardMsgContent(msgContent);
+                      setForwardMsgOpen(true);
+                    }}
+                    index={idx}
+                  />
+                );
+              })}
+            </>
           )}
           <div ref={bottomRef} />
         </div>
@@ -757,6 +1425,23 @@ export default function ChatView({
                 <Paperclip className="h-5 w-5 text-muted-foreground" />
               </Button>
 
+              {!isGroup && otherProfile && (
+                <Button
+                  data-ocid="chat.gift_gold.button"
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => setGiftGoldOpen(true)}
+                  disabled={isUploading || sending}
+                  className="h-10 w-10 rounded-xl hover:bg-muted shrink-0"
+                  title="Gift Gold"
+                >
+                  <Coins
+                    className="h-5 w-5"
+                    style={{ color: "oklch(0.82 0.15 72)" }}
+                  />
+                </Button>
+              )}
+
               <Input
                 data-ocid="chat.message_input"
                 placeholder="Message..."
@@ -850,6 +1535,149 @@ export default function ChatView({
           onStartChat={() => {}}
         />
       )}
+
+      {/* Sender profile modal (group chats) */}
+      {senderProfileId && (
+        <UserProfileModal
+          userId={senderProfileId}
+          open={!!senderProfileId}
+          onOpenChange={(open) => {
+            if (!open) setSenderProfileId(null);
+          }}
+          onStartChat={() => {
+            setSenderProfileId(null);
+          }}
+        />
+      )}
+
+      {/* Gift Gold Dialog */}
+      <Dialog open={giftGoldOpen} onOpenChange={setGiftGoldOpen}>
+        <DialogContent
+          className="sm:max-w-sm"
+          style={{
+            background: "oklch(0.13 0.02 55)",
+            border: "1px solid oklch(0.82 0.15 72 / 0.2)",
+          }}
+          data-ocid="chat.gift_gold.dialog"
+        >
+          <DialogHeader>
+            <DialogTitle style={{ color: "oklch(0.82 0.15 72)" }}>
+              Gift Gold to {otherProfile?.username}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label className="text-muted-foreground text-xs">Amount</Label>
+              <Input
+                data-ocid="chat.gift_gold.input"
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="Enter amount..."
+                value={giftAmount}
+                onChange={(e) => {
+                  setGiftAmount(e.target.value);
+                  setGiftError("");
+                }}
+                className={`bg-input border-border${giftError ? " border-destructive" : ""}`}
+              />
+            </div>
+            {giftError && (
+              <p
+                className="text-xs text-destructive"
+                data-ocid="chat.gift_gold.error_state"
+              >
+                {giftError}
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Your balance: ✦ {(Number(myGoldBalance ?? 0) / 100).toFixed(2)}{" "}
+              Gold
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              data-ocid="chat.gift_gold.cancel_button"
+              variant="outline"
+              onClick={() => setGiftGoldOpen(false)}
+              className="border-border"
+            >
+              Cancel
+            </Button>
+            <Button
+              data-ocid="chat.gift_gold.submit_button"
+              onClick={handleGiftGold}
+              disabled={
+                transferGold.isPending ||
+                !giftAmount ||
+                Number.parseFloat(giftAmount) < 0.01
+              }
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.76 0.13 72), oklch(0.65 0.11 65))",
+                color: "oklch(0.08 0.004 55)",
+              }}
+            >
+              {transferGold.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+              ) : null}
+              Send Gold
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Forward Message Dialog */}
+      <Dialog open={forwardMsgOpen} onOpenChange={setForwardMsgOpen}>
+        <DialogContent
+          data-ocid="chat.forward_message.dialog"
+          className="bg-card border-border max-w-sm"
+          style={{
+            background: "oklch(0.13 0.02 55)",
+            border: "1px solid oklch(0.82 0.15 72 / 0.2)",
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle style={{ color: "oklch(0.82 0.15 72)" }}>
+              Forward to...
+            </DialogTitle>
+          </DialogHeader>
+          <ForwardMessagePicker
+            conversations={conversations ?? []}
+            currentUserId={currentUserId}
+            onSelect={async (convId) => {
+              if (!forwardMsgContent) return;
+              try {
+                await sendMessage({
+                  conversationId: convId,
+                  messageInput: {
+                    content: {
+                      text: forwardMsgContent.text || "",
+                      mediaUrl: forwardMsgContent.mediaUrl,
+                      mediaType: forwardMsgContent.mediaType
+                        ? ({ [forwardMsgContent.mediaType]: null } as any)
+                        : undefined,
+                    },
+                  },
+                });
+                toast.success("Message forwarded");
+                setForwardMsgOpen(false);
+              } catch {
+                toast.error("Failed to forward");
+              }
+            }}
+          />
+          <DialogFooter>
+            <Button
+              data-ocid="chat.forward_message.cancel_button"
+              variant="ghost"
+              onClick={() => setForwardMsgOpen(false)}
+            >
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

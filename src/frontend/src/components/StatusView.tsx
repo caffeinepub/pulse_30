@@ -16,6 +16,8 @@ import {
 import AddStatusModal from "./AddStatusModal";
 import UserProfileModal from "./UserProfileModal";
 
+const PAGE_SIZE = 19;
+
 function getInitials(name: string) {
   return name
     .split(" ")
@@ -344,6 +346,7 @@ export default function StatusView({
     null,
   );
   const [profileViewOpen, setProfileViewOpen] = useState(false);
+  const [page, setPage] = useState(1);
 
   const { data: myStatuses = [] } = useGetMyStatuses();
   const { data: allStories = [] } = useGetAllStories();
@@ -353,6 +356,9 @@ export default function StatusView({
     ([, statuses]) =>
       statuses.length > 0 && statuses[0].author.toText() !== currentUserId,
   );
+
+  const visibleStories = otherStories.slice(0, page * PAGE_SIZE);
+  const hasMore = otherStories.length > page * PAGE_SIZE;
 
   const myLatest = myStatuses[myStatuses.length - 1];
   const myName = currentProfile?.displayName ?? "Me";
@@ -453,7 +459,7 @@ export default function StatusView({
             Recent Stories
           </p>
           <div className="flex flex-col gap-1">
-            {otherStories.map(([profile, statuses], idx) => {
+            {visibleStories.map(([profile, statuses], idx) => {
               if (!statuses.length) return null;
               const latest = statuses[statuses.length - 1];
               const ocid = idx + 1;
@@ -499,6 +505,18 @@ export default function StatusView({
               );
             })}
           </div>
+          {hasMore && (
+            <button
+              type="button"
+              data-ocid="status.pagination_next"
+              onClick={() => setPage((p) => p + 1)}
+              className="w-full py-3 mt-1 text-xs font-semibold text-center transition-colors hover:bg-muted/30 rounded-xl"
+              style={{ color: "oklch(0.82 0.15 72)" }}
+            >
+              Show {Math.min(PAGE_SIZE, otherStories.length - page * PAGE_SIZE)}{" "}
+              more
+            </button>
+          )}
         </div>
       )}
 

@@ -1,3 +1,13 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -6,6 +16,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -17,7 +33,9 @@ import {
   Image,
   Loader2,
   Mic,
+  MoreVertical,
   Send,
+  Trash2,
   Users,
   Video,
 } from "lucide-react";
@@ -27,6 +45,7 @@ import { toast } from "sonner";
 import { useMediaUpload } from "../hooks/useMediaUpload";
 import {
   useAddChannelPost,
+  useDeleteChannel,
   useFollowChannel,
   useGetChannel,
   useGetChannelPosts,
@@ -220,6 +239,9 @@ export default function ChannelView({
   const [postText, setPostText] = useState("");
   const [pendingMedia, setPendingMedia] = useState<File | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const { mutateAsync: deleteChannel, isPending: deleting } =
+    useDeleteChannel();
   const imageRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLInputElement>(null);
@@ -346,15 +368,79 @@ export default function ChannelView({
 
           <div className="flex items-center gap-2 shrink-0">
             {isOwner && (
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => setEditOpen(true)}
-                className="h-9 w-9 rounded-xl hover:bg-muted"
-                data-ocid="channel.view.edit_button"
-              >
-                <Edit className="h-4 w-4" />
-              </Button>
+              <>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-9 w-9 rounded-xl hover:bg-muted"
+                      data-ocid="channel.view.open_modal_button"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    className="bg-card border-border"
+                  >
+                    <DropdownMenuItem
+                      onClick={() => setEditOpen(true)}
+                      className="cursor-pointer"
+                      data-ocid="channel.view.edit_button"
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit Channel
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setDeleteConfirmOpen(true)}
+                      className="cursor-pointer text-destructive focus:text-destructive"
+                      data-ocid="channel.view.delete_button"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Channel
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <AlertDialog
+                  open={deleteConfirmOpen}
+                  onOpenChange={setDeleteConfirmOpen}
+                >
+                  <AlertDialogContent className="bg-card border-border">
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete Channel</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Are you sure you want to delete "{channel.name}"? This
+                        action cannot be undone and all posts will be lost.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel data-ocid="channel.delete.cancel_button">
+                        Cancel
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        data-ocid="channel.delete.confirm_button"
+                        disabled={deleting}
+                        onClick={async () => {
+                          try {
+                            await deleteChannel(channelId);
+                            toast.success("Channel deleted");
+                            onBack();
+                          } catch {
+                            toast.error("Failed to delete channel");
+                          }
+                        }}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        {deleting ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : null}
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </>
             )}
             {!isOwner && (
               <Button

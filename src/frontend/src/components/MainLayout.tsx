@@ -1,26 +1,36 @@
 import { Principal } from "@icp-sdk/core/principal";
 import { useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, Radio } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Loader2, MessageCircle, Radio } from "lucide-react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import type { ConversationId } from "../backend";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   useCreateDirectConversation,
   useGetCallerUserProfile,
+  useSearchUserByUsername,
   useUpdateLastSeen,
 } from "../hooks/useQueries";
 import type { ChannelId } from "../hooks/useQueries";
-import ChannelView from "./ChannelView";
+const ChannelView = lazy(() => import("./ChannelView"));
 import ChatView from "./ChatView";
 import Sidebar from "./Sidebar";
 import UserProfileModal from "./UserProfileModal";
 
-export default function MainLayout() {
+interface MainLayoutProps {
+  pendingProfileUsername?: string | null;
+  onPendingProfileHandled?: () => void;
+}
+
+export default function MainLayout({
+  pendingProfileUsername,
+  onPendingProfileHandled,
+}: MainLayoutProps) {
   const { identity, clear } = useInternetIdentity();
   const { data: profile } = useGetCallerUserProfile();
   const { mutate: updateLastSeen } = useUpdateLastSeen();
   const { mutateAsync: createDirectConversation } =
     useCreateDirectConversation();
+  const { mutateAsync: searchUser } = useSearchUserByUsername();
   const queryClient = useQueryClient();
   const [activeConversationId, setActiveConversationId] =
     useState<ConversationId | null>(null);
@@ -40,6 +50,25 @@ export default function MainLayout() {
     const interval = setInterval(() => updateLastSeen(), 30000);
     return () => clearInterval(interval);
   }, [updateLastSeen]);
+
+  // Handle pending profile username from URL (e.g. /profile/:username)
+  useEffect(() => {
+    if (!pendingProfileUsername) return;
+    let cancelled = false;
+    searchUser(pendingProfileUsername)
+      .then((result) => {
+        if (cancelled || !result) return;
+        setProfileModalUserId(result.userId.toString());
+        setProfileModalOpen(true);
+        onPendingProfileHandled?.();
+      })
+      .catch(() => {
+        if (!cancelled) onPendingProfileHandled?.();
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingProfileUsername, searchUser, onPendingProfileHandled]);
 
   const handleSelectConversation = (id: ConversationId) => {
     setActiveConversationId(id);
@@ -67,6 +96,16 @@ export default function MainLayout() {
     setProfileModalOpen(true);
   };
 
+  const handleViewProfileByUsername = async (username: string) => {
+    try {
+      const result = await searchUser(username);
+      if (!result) return;
+      handleOpenUserProfile(result.userId.toString());
+    } catch {
+      // silently fail
+    }
+  };
+
   const handleStartChatFromProfile = async (userId: string) => {
     try {
       const convId = await createDirectConversation(Principal.fromText(userId));
@@ -79,11 +118,22 @@ export default function MainLayout() {
   const mainContent = () => {
     if (activeChannelId !== null) {
       return (
-        <ChannelView
-          channelId={activeChannelId}
-          currentUserId={currentUserId}
-          onBack={handleBackToList}
-        />
+        <Suspense
+          fallback={
+            <div className="flex-1 flex items-center justify-center">
+              <Loader2
+                className="h-6 w-6 animate-spin"
+                style={{ color: "oklch(0.82 0.15 72)" }}
+              />
+            </div>
+          }
+        >
+          <ChannelView
+            channelId={activeChannelId}
+            currentUserId={currentUserId}
+            onBack={handleBackToList}
+          />
+        </Suspense>
       );
     }
     if (activeConversationId !== null) {
@@ -118,7 +168,7 @@ export default function MainLayout() {
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground/40">
             <Radio className="h-4 w-4" />
-            <span>Channels tab — browse & follow broadcaster channels</span>
+            <span>Channels tab — browse &amp; follow broadcaster channels</span>
           </div>
         </div>
       </div>
@@ -140,6 +190,7 @@ export default function MainLayout() {
           onSelectConversation={handleSelectConversation}
           onSelectChannel={handleSelectChannel}
           onStartChat={handleStartChatFromProfile}
+          onViewProfile={handleViewProfileByUsername}
           onLogout={handleLogout}
         />
       </div>

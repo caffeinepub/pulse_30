@@ -17,19 +17,28 @@ import {
   Pencil,
   Plus,
   Radio,
+  ScanLine,
   Search,
+  Wallet,
+  X,
 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Conversation, ConversationId, UserProfile } from "../backend";
 import {
+  useCreateDirectConversation,
+  useGetGroupAvatars,
   useGetUserProfile,
   useListUserConversations,
+  useSearchUserByUsername,
 } from "../hooks/useQueries";
 import type { ChannelId } from "../hooks/useQueries";
+import { useQRScanner } from "../qr-code/useQRScanner";
 import ChannelsTab from "./ChannelsTab";
 import EditProfileModal from "./EditProfileModal";
 import NewChatModal from "./NewChatModal";
 import StatusView from "./StatusView";
+import UserProfileModal from "./UserProfileModal";
+import WalletTab from "./WalletTab";
 
 function getInitials(name: string) {
   return name
@@ -58,6 +67,7 @@ interface ConversationItemProps {
   isActive: boolean;
   onClick: () => void;
   index: number;
+  groupAvatar?: string;
 }
 
 function ConversationItem({
@@ -66,6 +76,7 @@ function ConversationItem({
   isActive,
   onClick,
   index,
+  groupAvatar,
 }: ConversationItemProps) {
   const isGroup = conversation.type.__kind__ === "group";
   const otherUserId = isGroup
@@ -110,9 +121,11 @@ function ConversationItem({
       }`}
     >
       <Avatar className="w-11 h-11 shrink-0">
-        {otherProfile?.avatarUrl && (
+        {isGroup && groupAvatar ? (
+          <AvatarImage src={groupAvatar} alt={name} />
+        ) : !isGroup && otherProfile?.avatarUrl ? (
           <AvatarImage src={otherProfile.avatarUrl} alt={name} />
-        )}
+        ) : null}
         <AvatarFallback
           className="text-sm font-semibold"
           style={{
@@ -161,6 +174,235 @@ function ConversationItem({
   );
 }
 
+// ConversationSections component
+interface ConversationSectionsProps {
+  filteredConversations: import("../backend").Conversation[];
+  currentUserId: string;
+  activeConversationId: import("../backend").ConversationId | null;
+  onSelectConversation: (id: import("../backend").ConversationId) => void;
+  groupAvatarMap: Map<string, string>;
+  showAllDMs: boolean;
+  setShowAllDMs: (fn: (v: boolean) => boolean) => void;
+  showAllGroups: boolean;
+  setShowAllGroups: (fn: (v: boolean) => boolean) => void;
+}
+
+function ConversationSections({
+  filteredConversations,
+  currentUserId,
+  activeConversationId,
+  onSelectConversation,
+  groupAvatarMap,
+  showAllDMs,
+  setShowAllDMs,
+  showAllGroups,
+  setShowAllGroups,
+}: ConversationSectionsProps) {
+  const dmConvs = filteredConversations.filter(
+    (c) => c.type.__kind__ !== "group",
+  );
+  const groupConvs = filteredConversations.filter(
+    (c) => c.type.__kind__ === "group",
+  );
+  const visibleDMs = showAllDMs ? dmConvs : dmConvs.slice(0, 9);
+  const visibleGroups = showAllGroups ? groupConvs : groupConvs.slice(0, 9);
+
+  return (
+    <>
+      {dmConvs.length > 0 && (
+        <>
+          <div className="px-4 pt-3 pb-1">
+            <span className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground/60">
+              Conversations
+            </span>
+          </div>
+          {visibleDMs.map((conv, idx) => (
+            <ConversationItem
+              key={conv.id.toString()}
+              conversation={conv}
+              currentUserId={currentUserId}
+              isActive={activeConversationId === conv.id}
+              onClick={() => onSelectConversation(conv.id)}
+              index={idx}
+              groupAvatar={undefined}
+            />
+          ))}
+          {dmConvs.length > 9 && (
+            <button
+              type="button"
+              className="w-full text-xs py-2 px-4 text-left font-medium"
+              style={{ color: "oklch(0.82 0.15 72)" }}
+              onClick={() => setShowAllDMs((v) => !v)}
+              data-ocid="sidebar.dms.show_more_button"
+            >
+              {showAllDMs ? "Show less" : `Show ${dmConvs.length - 9} more`}
+            </button>
+          )}
+        </>
+      )}
+      {groupConvs.length > 0 && (
+        <>
+          <div className="px-4 pt-3 pb-1">
+            <span className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground/60">
+              Groups
+            </span>
+          </div>
+          {visibleGroups.map((conv, idx) => (
+            <ConversationItem
+              key={conv.id.toString()}
+              conversation={conv}
+              currentUserId={currentUserId}
+              isActive={activeConversationId === conv.id}
+              onClick={() => onSelectConversation(conv.id)}
+              index={dmConvs.length + idx}
+              groupAvatar={groupAvatarMap.get(conv.id.toString())}
+            />
+          ))}
+          {groupConvs.length > 9 && (
+            <button
+              type="button"
+              className="w-full text-xs py-2 px-4 text-left font-medium"
+              style={{ color: "oklch(0.82 0.15 72)" }}
+              onClick={() => setShowAllGroups((v) => !v)}
+              data-ocid="sidebar.groups.show_more_button"
+            >
+              {showAllGroups
+                ? "Show less"
+                : `Show ${groupConvs.length - 9} more`}
+            </button>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+// QR Scanner Modal
+function QRScannerModal({
+  open,
+  onClose,
+  onScanned,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onScanned: (username: string) => void;
+}) {
+  const { videoRef, canvasRef, startScanning, stopScanning, qrResults } =
+    useQRScanner({});
+  const hasHandled = useRef(false);
+
+  useEffect(() => {
+    if (open) {
+      hasHandled.current = false;
+      startScanning();
+    } else {
+      stopScanning();
+    }
+    return () => {
+      stopScanning();
+    };
+  }, [open, startScanning, stopScanning]);
+
+  useEffect(() => {
+    if (!qrResults || qrResults.length === 0 || hasHandled.current) return;
+    const raw = qrResults[0].data;
+    // Match pattern: <origin>/profile/<username>
+    const origin = window.location.origin;
+    const escaped = origin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const profilePattern = new RegExp(`^${escaped}/profile/([^/]+)$`);
+    const match = raw.match(profilePattern);
+    if (match) {
+      hasHandled.current = true;
+      onScanned(decodeURIComponent(match[1]));
+      onClose();
+    }
+  }, [qrResults, onScanned, onClose]);
+
+  if (!open) return null;
+
+  const corners = [
+    { pos: "top-2 left-2", border: "3px 0 0 3px", radius: "6px 0 0 0" },
+    { pos: "top-2 right-2", border: "3px 3px 0 0", radius: "0 6px 0 0" },
+    { pos: "bottom-2 left-2", border: "0 0 3px 3px", radius: "0 0 0 6px" },
+    { pos: "bottom-2 right-2", border: "0 3px 3px 0", radius: "0 0 6px 0" },
+  ];
+
+  return (
+    <div
+      data-ocid="qrscanner.modal"
+      className="fixed inset-0 z-50 flex flex-col"
+      style={{ background: "rgba(0,0,0,0.92)" }}
+    >
+      {/* Close button */}
+      <div className="flex items-center justify-between p-4 shrink-0">
+        <span
+          className="font-display text-lg font-semibold"
+          style={{ color: "oklch(0.76 0.13 72)" }}
+        >
+          Scan Profile QR
+        </span>
+        <Button
+          data-ocid="qrscanner.close_button"
+          size="icon"
+          variant="ghost"
+          onClick={onClose}
+          className="h-9 w-9 rounded-xl"
+          style={{ color: "oklch(0.76 0.13 72)" }}
+        >
+          <X className="h-5 w-5" />
+        </Button>
+      </div>
+
+      {/* Camera area */}
+      <div className="flex-1 flex items-center justify-center relative">
+        <div className="relative w-full max-w-sm aspect-square mx-4">
+          <video
+            ref={videoRef as React.RefObject<HTMLVideoElement>}
+            autoPlay
+            playsInline
+            muted
+            className="w-full h-full object-cover rounded-2xl"
+            style={{ background: "oklch(0.08 0.003 55)" }}
+          />
+          <canvas
+            ref={canvasRef as React.RefObject<HTMLCanvasElement>}
+            className="hidden"
+          />
+
+          {/* Gold scan frame overlay */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              borderRadius: "1rem",
+              boxShadow: "inset 0 0 0 2px oklch(0.76 0.13 72 / 0.6)",
+            }}
+          >
+            {corners.map(({ pos, border, radius }) => (
+              <div
+                key={pos}
+                className={`absolute ${pos} w-8 h-8`}
+                style={{
+                  borderColor: "oklch(0.76 0.13 72)",
+                  borderStyle: "solid",
+                  borderWidth: border,
+                  borderRadius: radius,
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Hint */}
+      <div className="p-6 text-center shrink-0">
+        <p className="text-sm" style={{ color: "oklch(0.55 0.06 70)" }}>
+          Point your camera at a Pulse profile QR code
+        </p>
+      </div>
+    </div>
+  );
+}
+
 interface SidebarProps {
   currentUserId: string;
   currentProfile: UserProfile | null;
@@ -168,6 +410,7 @@ interface SidebarProps {
   onSelectConversation: (id: ConversationId) => void;
   onSelectChannel: (id: ChannelId) => void;
   onStartChat: (userId: string) => void;
+  onViewProfile: (username: string) => void;
   onLogout: () => void;
 }
 
@@ -178,13 +421,33 @@ export default function Sidebar({
   onSelectConversation,
   onSelectChannel,
   onStartChat,
+  onViewProfile,
   onLogout,
 }: SidebarProps) {
   const [search, setSearch] = useState("");
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("chats");
+  const [qrScannerOpen, setQrScannerOpen] = useState(false);
+  const [showAllDMs, setShowAllDMs] = useState(false);
+  const [showAllGroups, setShowAllGroups] = useState(false);
+  const [channelCreatorUserId, setChannelCreatorUserId] = useState<
+    string | null
+  >(null);
+  const [channelCreatorOpen, setChannelCreatorOpen] = useState(false);
   const { data: conversations, isLoading } = useListUserConversations();
+  const { data: groupAvatarsData } = useGetGroupAvatars();
+  const { mutateAsync: searchUser } = useSearchUserByUsername();
+  const { mutateAsync: createDirectConversation } =
+    useCreateDirectConversation();
+
+  const groupAvatarMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const [id, url] of groupAvatarsData ?? []) {
+      m.set(id.toString(), url);
+    }
+    return m;
+  }, [groupAvatarsData]);
 
   const filteredConversations = useCallback(() => {
     if (!conversations) return [];
@@ -205,6 +468,39 @@ export default function Sidebar({
     onSelectConversation(id);
   };
 
+  const handleOpenChatByUsername = async (username: string) => {
+    try {
+      const result = await searchUser(username);
+      if (!result) {
+        return;
+      }
+      const convId = await createDirectConversation(result.userId);
+      setActiveTab("chats");
+      onSelectConversation(convId);
+    } catch {
+      // silently fail; user can try manually
+    }
+  };
+
+  const handleChannelAvatarClick = (userId: string) => {
+    setChannelCreatorUserId(userId);
+    setChannelCreatorOpen(true);
+  };
+
+  const handleStartChatFromChannelProfile = async (userId: string) => {
+    try {
+      const principal = (
+        await import("@icp-sdk/core/principal")
+      ).Principal.fromText(userId);
+      const convId = await createDirectConversation(principal);
+      setChannelCreatorOpen(false);
+      setActiveTab("chats");
+      onSelectConversation(convId);
+    } catch {
+      // silently fail
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -217,16 +513,28 @@ export default function Sidebar({
           </div>
           <div className="flex items-center gap-1">
             {activeTab === "chats" && (
-              <Button
-                data-ocid="sidebar.new_chat_button"
-                size="icon"
-                variant="ghost"
-                onClick={() => setNewChatOpen(true)}
-                className="h-9 w-9 rounded-xl hover:bg-muted"
-                aria-label="New chat"
-              >
-                <Plus className="h-5 w-5" />
-              </Button>
+              <>
+                <Button
+                  data-ocid="sidebar.scan_qr_button"
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => setQrScannerOpen(true)}
+                  className="h-9 w-9 rounded-xl hover:bg-muted"
+                  aria-label="Scan QR code"
+                >
+                  <ScanLine className="h-5 w-5" />
+                </Button>
+                <Button
+                  data-ocid="sidebar.new_chat_button"
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => setNewChatOpen(true)}
+                  className="h-9 w-9 rounded-xl hover:bg-muted"
+                  aria-label="New chat"
+                >
+                  <Plus className="h-5 w-5" />
+                </Button>
+              </>
             )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -321,6 +629,14 @@ export default function Sidebar({
               <Radio className="h-3.5 w-3.5 mr-1" />
               Channels
             </TabsTrigger>
+            <TabsTrigger
+              value="wallet"
+              className="flex-1"
+              data-ocid="sidebar.wallet_tab"
+            >
+              <Wallet className="h-3.5 w-3.5 mr-1" />
+              Wallet
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="chats" className="mt-0">
@@ -339,6 +655,7 @@ export default function Sidebar({
 
           <TabsContent value="status" className="mt-0" />
           <TabsContent value="channels" className="mt-0" />
+          <TabsContent value="wallet" className="mt-0" />
         </Tabs>
       </div>
 
@@ -353,7 +670,15 @@ export default function Sidebar({
         <ChannelsTab
           currentUserId={currentUserId}
           onSelectChannel={onSelectChannel}
+          onAvatarClick={handleChannelAvatarClick}
         />
+      ) : activeTab === "wallet" ? (
+        <div className="flex-1 overflow-y-auto scrollbar-thin">
+          <WalletTab
+            currentUsername={currentProfile?.username ?? ""}
+            onOpenChat={handleOpenChatByUsername}
+          />
+        </div>
       ) : (
         <div className="flex-1 overflow-y-auto scrollbar-thin">
           <div data-ocid="sidebar.conversation_list">
@@ -383,16 +708,17 @@ export default function Sidebar({
                 </p>
               </div>
             ) : (
-              filteredConversations.map((conv, idx) => (
-                <ConversationItem
-                  key={conv.id.toString()}
-                  conversation={conv}
-                  currentUserId={currentUserId}
-                  isActive={activeConversationId === conv.id}
-                  onClick={() => onSelectConversation(conv.id)}
-                  index={idx}
-                />
-              ))
+              <ConversationSections
+                filteredConversations={filteredConversations}
+                currentUserId={currentUserId}
+                activeConversationId={activeConversationId}
+                onSelectConversation={onSelectConversation}
+                groupAvatarMap={groupAvatarMap}
+                showAllDMs={showAllDMs}
+                setShowAllDMs={setShowAllDMs}
+                showAllGroups={showAllGroups}
+                setShowAllGroups={setShowAllGroups}
+              />
             )}
           </div>
         </div>
@@ -409,6 +735,21 @@ export default function Sidebar({
         onOpenChange={setNewChatOpen}
         currentUserId={currentUserId}
         onConversationCreated={handleConversationCreated}
+      />
+
+      {/* QR Scanner Modal */}
+      <QRScannerModal
+        open={qrScannerOpen}
+        onClose={() => setQrScannerOpen(false)}
+        onScanned={onViewProfile}
+      />
+
+      {/* Channel creator profile modal */}
+      <UserProfileModal
+        userId={channelCreatorUserId}
+        open={channelCreatorOpen}
+        onOpenChange={setChannelCreatorOpen}
+        onStartChat={handleStartChatFromChannelProfile}
       />
     </div>
   );

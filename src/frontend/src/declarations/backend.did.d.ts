@@ -10,6 +10,52 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface AppNotification {
+  'id' : NotificationId,
+  'kind' : NotificationKind,
+  'read' : boolean,
+  'timestamp' : Timestamp,
+}
+export interface Channel {
+  'id' : ChannelId,
+  'owner' : UserId,
+  'name' : string,
+  'createdAt' : Timestamp,
+  'description' : string,
+  'avatarUrl' : [] | [string],
+}
+export type ChannelCommentId = bigint;
+export interface ChannelCommentWithProfile {
+  'id' : ChannelCommentId,
+  'text' : string,
+  'author' : UserProfile,
+  'timestamp' : Timestamp,
+}
+export type ChannelId = bigint;
+export interface ChannelPost {
+  'id' : ChannelPostId,
+  'content' : ChannelPostContent,
+  'channelId' : ChannelId,
+  'author' : UserId,
+  'timestamp' : Timestamp,
+}
+export interface ChannelPostContent {
+  'text' : string,
+  'mediaUrl' : [] | [string],
+  'mediaType' : [] | [MediaType],
+}
+export type ChannelPostId = bigint;
+export interface ChannelPostInteractions {
+  'likeCount' : bigint,
+  'comments' : Array<ChannelCommentWithProfile>,
+  'likedByMe' : boolean,
+}
+export interface ChannelWithMeta {
+  'ownerProfile' : UserProfile,
+  'isFollowing' : boolean,
+  'followerCount' : bigint,
+  'channel' : Channel,
+}
 export type CommentId = bigint;
 export interface Conversation {
   'id' : ConversationId,
@@ -21,6 +67,20 @@ export interface Conversation {
 export type ConversationId = bigint;
 export type ConversationType = { 'group' : string } |
   { 'direct' : null };
+export interface DealerInfo { 'username' : string, 'balance' : bigint }
+export interface GoldTransaction {
+  'id' : GoldTxId,
+  'timestamp' : Timestamp,
+  'txType' : GoldTxType,
+  'counterpartyUsername' : [] | [string],
+  'amount' : bigint,
+}
+export type GoldTxId = bigint;
+export type GoldTxType = { 'buyRequest' : null } |
+  { 'sent' : null } |
+  { 'claimed' : null } |
+  { 'received' : null } |
+  { 'sellRequest' : null };
 export type MediaType = { 'audio' : null } |
   { 'other' : string } |
   { 'video' : null } |
@@ -44,6 +104,27 @@ export interface MessageReadReceipt {
   'userId' : UserId,
   'timestamp' : Timestamp,
 }
+export type NotificationId = bigint;
+export type NotificationKind = {
+    'goldGifted' : { 'fromUsername' : string, 'amount' : bigint }
+  } |
+  {
+    'channelPostLiked' : {
+      'channelId' : bigint,
+      'byUsername' : string,
+      'postId' : bigint,
+    }
+  } |
+  {
+    'channelPostCommented' : {
+      'channelId' : bigint,
+      'byUsername' : string,
+      'postId' : bigint,
+    }
+  } |
+  { 'storyCommented' : { 'byUsername' : string, 'statusId' : bigint } } |
+  { 'storyLiked' : { 'byUsername' : string, 'statusId' : bigint } } |
+  { 'channelFollowed' : { 'channelId' : bigint, 'byUsername' : string } };
 export interface Status {
   'id' : StatusId,
   'content' : StatusContent,
@@ -107,27 +188,57 @@ export interface _SERVICE {
   >,
   '_caffeineStorageUpdateGatewayPrincipals' : ActorMethod<[], undefined>,
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
+  'addChannelPost' : ActorMethod<
+    [ChannelId, ChannelPostContent],
+    ChannelPostId
+  >,
   'addStatus' : ActorMethod<[StatusContent], StatusId>,
+  'adminClaimGold' : ActorMethod<[bigint], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'blockUser' : ActorMethod<[UserId], undefined>,
+  'commentOnChannelPost' : ActorMethod<
+    [ChannelPostId, string],
+    ChannelCommentId
+  >,
   'commentOnStatus' : ActorMethod<[StatusId, string], CommentId>,
+  'createChannel' : ActorMethod<[string, string, [] | [string]], ChannelId>,
   'createDirectConversation' : ActorMethod<[UserId], ConversationId>,
   'createGroupConversation' : ActorMethod<
-    [string, Array<UserId>],
+    [string, Array<UserId>, [] | [string]],
     ConversationId
   >,
+  'deleteChannel' : ActorMethod<[ChannelId], undefined>,
   'deleteGroupName' : ActorMethod<[ConversationId], undefined>,
+  'followChannel' : ActorMethod<[ChannelId], undefined>,
+  'forwardChannelPost' : ActorMethod<
+    [ChannelPostId, ConversationId],
+    MessageId
+  >,
+  'getAdminTotalClaimed' : ActorMethod<[], bigint>,
+  'getAllChannels' : ActorMethod<[], Array<ChannelWithMeta>>,
   'getAllStories' : ActorMethod<[], Array<[UserProfile, Array<Status>]>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
+  'getChannel' : ActorMethod<[ChannelId], [] | [ChannelWithMeta]>,
+  'getChannelPostInteractions' : ActorMethod<
+    [ChannelPostId],
+    ChannelPostInteractions
+  >,
+  'getChannelPosts' : ActorMethod<[ChannelId], Array<ChannelPost>>,
   'getContactStatuses' : ActorMethod<[], Array<[UserProfile, Array<Status>]>>,
   'getConversation' : ActorMethod<[ConversationId], [] | [Conversation]>,
+  'getGroupAvatars' : ActorMethod<[], Array<[ConversationId, string]>>,
   'getMessageReadReceipts' : ActorMethod<
     [ConversationId, MessageId],
     [] | [Array<MessageReadReceipt>]
   >,
   'getMessages' : ActorMethod<[ConversationId, bigint, bigint], Array<Message>>,
+  'getMyBlockedUsers' : ActorMethod<[], Array<UserProfile>>,
   'getMyConversations' : ActorMethod<[], Array<Conversation>>,
+  'getMyGoldBalance' : ActorMethod<[], bigint>,
+  'getMyNotifications' : ActorMethod<[], Array<AppNotification>>,
   'getMyStatuses' : ActorMethod<[], Array<Status>>,
+  'getMyTransactionHistory' : ActorMethod<[], Array<GoldTransaction>>,
   'getPaginatedMessages' : ActorMethod<
     [ConversationId, bigint, bigint],
     Array<Message>
@@ -136,22 +247,40 @@ export interface _SERVICE {
   'getUnreadCount' : ActorMethod<[ConversationId], bigint>,
   'getUserByPrincipal' : ActorMethod<[UserId], [] | [UserProfile]>,
   'getUserProfile' : ActorMethod<[UserId], [] | [UserProfile]>,
+  'getUsersWithGoldAbove' : ActorMethod<[bigint], Array<DealerInfo>>,
+  'isBlockedBy' : ActorMethod<[UserId], boolean>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'isUserOnline' : ActorMethod<[UserId], boolean>,
+  'leaveConversation' : ActorMethod<[ConversationId], undefined>,
+  'addGroupMember' : ActorMethod<[ConversationId, string], undefined>,
+  'removeGroupMember' : ActorMethod<[ConversationId, UserId], undefined>,
+  'getGroupCreators' : ActorMethod<[], Array<[ConversationId, UserId]>>,
+  'likeChannelPost' : ActorMethod<[ChannelPostId], undefined>,
   'likeStatus' : ActorMethod<[StatusId], undefined>,
   'listUserConversations' : ActorMethod<[], Array<Conversation>>,
   'markAsRead' : ActorMethod<[ConversationId], undefined>,
   'markMessagesAsRead' : ActorMethod<[ConversationId], undefined>,
+  'markNotificationsRead' : ActorMethod<[], undefined>,
+  'requestBuyGold' : ActorMethod<[bigint], undefined>,
+  'requestSellGold' : ActorMethod<[bigint], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'searchUserByUsername' : ActorMethod<
     [string],
     [] | [{ 'userId' : UserId, 'profile' : UserProfile }]
   >,
   'sendMessage' : ActorMethod<[ConversationId, MessageInput], MessageId>,
+  'transferGold' : ActorMethod<[string, bigint], undefined>,
+  'unblockUser' : ActorMethod<[UserId], undefined>,
+  'unfollowChannel' : ActorMethod<[ChannelId], undefined>,
+  'unlikeChannelPost' : ActorMethod<[ChannelPostId], undefined>,
   'unlikeStatus' : ActorMethod<[StatusId], undefined>,
   'updateCallerAvatar' : ActorMethod<[string], undefined>,
   'updateCallerBio' : ActorMethod<[string], undefined>,
   'updateCallerDisplayName' : ActorMethod<[string], undefined>,
+  'updateChannel' : ActorMethod<
+    [ChannelId, string, string, [] | [string]],
+    undefined
+  >,
   'updateGroupAvatar' : ActorMethod<[ConversationId, string], undefined>,
   'updateGroupName' : ActorMethod<[ConversationId, string], undefined>,
   'updateLastSeen' : ActorMethod<[], undefined>,

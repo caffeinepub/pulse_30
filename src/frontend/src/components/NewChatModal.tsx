@@ -1,4 +1,4 @@
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,10 +9,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Search, UserPlus, Users, X } from "lucide-react";
-import { useState } from "react";
+import { Camera, Loader2, Search, UserPlus, Users, X } from "lucide-react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import type { ConversationId, UserId, UserProfile } from "../backend";
+import { useMediaUpload } from "../hooks/useMediaUpload";
 import {
   useCreateDirectConversation,
   useCreateGroupConversation,
@@ -85,7 +86,13 @@ export default function NewChatModal({
   const [groupName, setGroupName] = useState("");
   const [groupMemberInput, setGroupMemberInput] = useState("");
   const [groupMembers, setGroupMembers] = useState<ResolvedUser[]>([]);
+  const [groupAvatarUrl, setGroupAvatarUrl] = useState<string | null>(null);
+  const [groupAvatarPreview, setGroupAvatarPreview] = useState<string | null>(
+    null,
+  );
+  const groupAvatarInputRef = useRef<HTMLInputElement>(null);
 
+  const { uploadMedia, isUploading: uploadingAvatar } = useMediaUpload();
   const { mutateAsync: searchUser, isPending: searching } =
     useSearchUserByUsername();
   const { mutateAsync: createDM, isPending: dmPending } =
@@ -103,6 +110,8 @@ export default function NewChatModal({
     setGroupName("");
     setGroupMemberInput("");
     setGroupMembers([]);
+    setGroupAvatarUrl(null);
+    setGroupAvatarPreview(null);
   };
 
   const handleSearchDm = async () => {
@@ -185,6 +194,7 @@ export default function NewChatModal({
       const id = await createGroup({
         name: groupName.trim(),
         members: groupMembers.map((m) => m.userId),
+        avatarUrl: groupAvatarUrl ?? undefined,
       });
       onConversationCreated(id);
       resetGroup();
@@ -300,6 +310,52 @@ export default function NewChatModal({
 
           {/* Group Tab */}
           <TabsContent value="group" className="flex flex-col gap-4">
+            {/* Group avatar picker */}
+            <div className="flex flex-col items-center gap-2">
+              <button
+                type="button"
+                data-ocid="new_chat.group_upload_button"
+                onClick={() => groupAvatarInputRef.current?.click()}
+                className="relative w-16 h-16 rounded-full overflow-hidden border-2 border-dashed border-primary/50 hover:border-primary transition-colors flex items-center justify-center bg-muted/30"
+              >
+                {groupAvatarPreview ? (
+                  <img
+                    src={groupAvatarPreview}
+                    alt="Group avatar"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <Camera className="h-5 w-5 text-muted-foreground" />
+                )}
+                {uploadingAvatar && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                    <Loader2 className="h-4 w-4 text-white animate-spin" />
+                  </div>
+                )}
+              </button>
+              <span className="text-xs text-muted-foreground">
+                Group Avatar (optional)
+              </span>
+              <input
+                ref={groupAvatarInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const preview = URL.createObjectURL(file);
+                  setGroupAvatarPreview(preview);
+                  try {
+                    const { url } = await uploadMedia(file);
+                    setGroupAvatarUrl(url);
+                  } catch {
+                    toast.error("Failed to upload avatar");
+                    setGroupAvatarPreview(null);
+                  }
+                }}
+              />
+            </div>
             <div className="flex flex-col gap-2">
               <Label className="text-foreground/80 text-sm">Group Name</Label>
               <Input
