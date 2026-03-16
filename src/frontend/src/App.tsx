@@ -41,12 +41,7 @@ export default function App() {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
-          <img
-            src="/assets/uploads/Photoroom_20260315_093214-1.png"
-            alt="Pulse"
-            className="w-16 h-16 object-contain"
-          />
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       </div>
     );

@@ -3,8 +3,6 @@ import { Loader2, MessageCircle, Shield, Users, Zap } from "lucide-react";
 import { motion } from "motion/react";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 
-const LOGO_URL = "/Photoroom_20260315_093214.png";
-
 export default function AuthScreen() {
   const { login, isLoggingIn } = useInternetIdentity();
 
@@ -66,28 +64,13 @@ export default function AuthScreen() {
         transition={{ duration: 0.7, ease: "easeOut" }}
         className="relative z-10 flex flex-col items-center gap-8 px-6 max-w-md w-full"
       >
-        {/* Logo */}
+        {/* Title */}
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.1 }}
           className="flex flex-col items-center gap-3"
         >
-          <div
-            className="w-20 h-20 rounded-2xl flex items-center justify-center overflow-hidden"
-            style={{
-              background:
-                "linear-gradient(135deg, oklch(0.76 0.13 72 / 0.15), oklch(0.65 0.11 65 / 0.1))",
-              boxShadow: "0 0 40px oklch(0.76 0.13 72 / 0.4)",
-              border: "1px solid oklch(0.76 0.13 72 / 0.3)",
-            }}
-          >
-            <img
-              src={LOGO_URL}
-              alt="Pulse"
-              className="w-16 h-16 object-contain"
-            />
-          </div>
           <h1 className="font-display text-6xl font-bold gold-shimmer">
             Pulse
           </h1>
