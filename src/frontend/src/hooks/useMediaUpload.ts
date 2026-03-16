@@ -9,11 +9,9 @@ import { useInternetIdentity } from "./useInternetIdentity";
 function getCanonicalMimeType(file: File): string {
   const t = file.type;
   if (t.startsWith("video/")) {
-    // Prefer video/mp4 for widest mobile compatibility
-    return t === "video/mp4" ? "video/mp4" : "video/mp4";
+    return "video/mp4";
   }
   if (t.startsWith("audio/")) {
-    // Prefer audio/mp4 (AAC) for iOS; fallback to audio/webm
     if (t === "audio/mp4" || t === "audio/x-m4a") return "audio/mp4";
     if (t === "audio/ogg") return "audio/ogg";
     return "audio/webm";
@@ -48,12 +46,16 @@ export function useMediaUpload() {
         config.project_id,
         agent,
       );
-      const bytes = new Uint8Array(await file.arrayBuffer());
+
+      // Re-wrap the file bytes as a typed Blob so the stored content has the correct MIME type
       const mimeType = getCanonicalMimeType(file);
-      const { hash } = await storageClient.putFile(
-        bytes,
-        (pct) => setUploadProgress(pct),
-        mimeType,
+      const rawBytes = new Uint8Array(await file.arrayBuffer());
+      // Embed MIME type by creating a new Blob with the canonical type and converting back to bytes
+      const typedBlob = new Blob([rawBytes], { type: mimeType });
+      const bytes = new Uint8Array(await typedBlob.arrayBuffer());
+
+      const { hash } = await storageClient.putFile(bytes, (pct) =>
+        setUploadProgress(pct),
       );
       const url = await storageClient.getDirectURL(hash);
 

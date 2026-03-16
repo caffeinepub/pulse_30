@@ -3,6 +3,8 @@ import { Loader2, MessageCircle, Shield, Users, Zap } from "lucide-react";
 import { motion } from "motion/react";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 
+const LOGO_URL = "/Photoroom_20260315_093214.png";
+
 export default function AuthScreen() {
   const { login, isLoggingIn } = useInternetIdentity();
 
@@ -81,7 +83,7 @@ export default function AuthScreen() {
             }}
           >
             <img
-              src="/assets/uploads/Photoroom_20260315_093214-1.png"
+              src={LOGO_URL}
               alt="Pulse"
               className="w-16 h-16 object-contain"
             />

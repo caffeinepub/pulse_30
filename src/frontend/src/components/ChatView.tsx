@@ -426,13 +426,20 @@ function MessageBubble({
               : "message-bubble-received rounded-bl-sm"
           }`}
         >
-          {message.content.mediaUrl && message.content.mediaType && (
-            <MediaMessage
-              url={message.content.mediaUrl}
-              mediaType={message.content.mediaType}
-              onImageClick={onImageClick}
-            />
-          )}
+          {message.content.mediaUrl &&
+            message.content.mediaType &&
+            (Date.now() - Number(message.timestamp) / 1_000_000 >
+            72 * 60 * 60 * 1000 ? (
+              <p className="text-xs text-muted-foreground italic py-1">
+                📎 Media expired
+              </p>
+            ) : (
+              <MediaMessage
+                url={message.content.mediaUrl}
+                mediaType={message.content.mediaType}
+                onImageClick={onImageClick}
+              />
+            ))}
           {message.content.text && (
             <p className="text-sm text-foreground leading-relaxed break-words">
               {message.content.text}

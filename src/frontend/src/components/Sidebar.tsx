@@ -41,6 +41,9 @@ import StatusView from "./StatusView";
 import UserProfileModal from "./UserProfileModal";
 import WalletTab from "./WalletTab";
 
+const LOGO_URL =
+  "https://blob.caffeine.ai/v1/blob/?blob_hash=sha256%3Af72c8b1872b6c4c4a2ee4171776af79904dde692e1b3500eebb353d12ca04068&owner_id=ogfnt-tqaaa-aaaae-afuja-cai&project_id=019ce73e-4cef-72bc-b1e2-2c9b46b1e1f9";
+
 function getInitials(name: string) {
   return name
     .split(" ")
@@ -523,7 +526,7 @@ export default function Sidebar({
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <img
-              src="/assets/uploads/Photoroom_20260315_093214-1.png"
+              src={LOGO_URL}
               alt="Pulse"
               className="w-8 h-8 object-contain rounded-lg"
             />
