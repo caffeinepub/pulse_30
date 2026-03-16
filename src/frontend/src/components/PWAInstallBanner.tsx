@@ -1,9 +1,7 @@
-import { X } from "lucide-react";
+import { Share2, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 
-const LOGO_URL =
-  "https://blob.caffeine.ai/v1/blob/?blob_hash=sha256%3Af72c8b1872b6c4c4a2ee4171776af79904dde692e1b3500eebb353d12ca04068&owner_id=ogfnt-tqaaa-aaaae-afuja-cai&project_id=019ce73e-4cef-72bc-b1e2-2c9b46b1e1f9";
 const STORAGE_KEY = "pwa-banner-dismissed";
 
 function isIOS() {
@@ -13,63 +11,63 @@ function isIOS() {
   );
 }
 
-// iOS share icon rendered as SVG (the square-with-arrow-up symbol)
-function IOSShareIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-      style={{ display: "inline", verticalAlign: "middle", marginBottom: 1 }}
-    >
-      <path d="M12 3L7 8h3v8h4V8h3L12 3Z" fill="oklch(0.82 0.15 72)" />
-      <path
-        d="M5 13v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6"
-        stroke="oklch(0.82 0.15 72)"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        fill="none"
-      />
-    </svg>
-  );
+function isAndroid() {
+  return /Android/.test(navigator.userAgent);
 }
 
-export default function PWAInstallBanner() {
+interface Props {
+  /** Trigger the banner to appear (e.g. after profile creation). */
+  triggerShow?: boolean;
+}
+
+export default function PWAInstallBanner({ triggerShow = false }: Props) {
   const [visible, setVisible] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const ios = isIOS();
 
+  // Capture Android/desktop install prompt
   useEffect(() => {
-    if (localStorage.getItem(STORAGE_KEY)) return;
-
-    if (ios) {
-      setVisible(true);
-      return;
-    }
-
     const handler = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      setVisible(true);
     };
-
     window.addEventListener("beforeinstallprompt", handler);
     return () => window.removeEventListener("beforeinstallprompt", handler);
-  }, [ios]);
+  }, []);
+
+  // Show banner when triggerShow fires (after profile creation)
+  useEffect(() => {
+    if (!triggerShow) return;
+    if (localStorage.getItem(STORAGE_KEY)) return;
+    // Don't show if already installed as standalone
+    if ((window.navigator as any).standalone) return;
+    if (window.matchMedia("(display-mode: standalone)").matches) return;
+    setVisible(true);
+  }, [triggerShow]);
 
   const dismiss = () => {
     localStorage.setItem(STORAGE_KEY, "1");
     setVisible(false);
   };
 
-  const install = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
-    dismiss();
+  const handleInstall = async () => {
+    if (ios) {
+      // Use Web Share API to open the native iOS share sheet
+      // which includes "Add to Home Screen"
+      try {
+        await navigator.share({
+          title: "Pulse",
+          text: "Add Pulse to your Home Screen for the best experience",
+          url: window.location.href,
+        });
+      } catch {
+        // User cancelled or share not supported — do nothing
+      }
+    } else if (deferredPrompt) {
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      dismiss();
+    }
   };
 
   return (
@@ -84,7 +82,7 @@ export default function PWAInstallBanner() {
           className="fixed bottom-0 left-0 right-0 z-50 mx-auto max-w-lg"
         >
           <div
-            className="m-3 rounded-2xl rounded-b-xl border px-4 py-3 flex items-center gap-3"
+            className="m-3 rounded-2xl border px-4 py-3 flex items-center gap-3"
             style={{
               background: "oklch(0.11 0.007 55)",
               borderColor: "oklch(0.76 0.13 72 / 0.5)",
@@ -92,7 +90,7 @@ export default function PWAInstallBanner() {
             }}
           >
             <img
-              src={LOGO_URL}
+              src="/assets/generated/icon-192.dim_192x192.png"
               alt="Pulse"
               className="w-10 h-10 rounded-xl shrink-0 object-contain"
             />
@@ -103,38 +101,35 @@ export default function PWAInstallBanner() {
               >
                 Add Pulse to your home screen
               </p>
-              {ios ? (
-                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                  Tap <IOSShareIcon /> then{" "}
-                  <span
-                    className="font-medium"
-                    style={{ color: "oklch(0.82 0.15 72)" }}
-                  >
-                    &ldquo;Add to Home Screen&rdquo;
-                  </span>{" "}
-                  for the best experience
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Faster access, works offline, feels native
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                {ios
+                  ? 'Tap the button below, then "Add to Home Screen"'
+                  : isAndroid()
+                    ? "Install for faster access and offline use"
+                    : "Install for the best experience"}
+              </p>
             </div>
-            {!ios && deferredPrompt && (
-              <button
-                type="button"
-                data-ocid="pwa.install_button"
-                onClick={install}
-                className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg"
-                style={{
-                  background:
-                    "linear-gradient(135deg, oklch(0.76 0.13 72), oklch(0.65 0.11 65))",
-                  color: "oklch(0.08 0.004 55)",
-                }}
-              >
-                Install
-              </button>
-            )}
+            {/* Action button */}
+            <button
+              type="button"
+              data-ocid="pwa.install_button"
+              onClick={handleInstall}
+              className="shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.76 0.13 72), oklch(0.65 0.11 65))",
+                color: "oklch(0.08 0.004 55)",
+              }}
+            >
+              {ios ? (
+                <>
+                  <Share2 className="h-3.5 w-3.5" />
+                  Share
+                </>
+              ) : (
+                "Install"
+              )}
+            </button>
             <button
               type="button"
               data-ocid="pwa.close_button"

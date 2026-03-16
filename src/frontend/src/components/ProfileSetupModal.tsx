@@ -19,7 +19,11 @@ function getInitials(name: string) {
     .slice(0, 2);
 }
 
-export default function ProfileSetupModal() {
+interface Props {
+  onProfileCreated?: () => void;
+}
+
+export default function ProfileSetupModal({ onProfileCreated }: Props) {
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
@@ -73,6 +77,7 @@ export default function ProfileSetupModal() {
         ...(avatarUrl ? { avatarUrl } : {}),
       });
       toast.success("Profile created! Welcome to Pulse.");
+      onProfileCreated?.();
     } catch {
       toast.error("Failed to create profile. Please try again.");
     }

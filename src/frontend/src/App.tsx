@@ -20,6 +20,9 @@ export default function App() {
   const showProfileSetup = isAuthenticated && isFetched && profile === null;
   const showMain = isAuthenticated && isFetched && profile !== null;
 
+  // Track whether the PWA banner should be triggered (fires once after profile creation)
+  const [pwaBannerTrigger, setPwaBannerTrigger] = useState(false);
+
   // Parse pending profile username from URL path like /profile/:username
   const [pendingProfileUsername, setPendingProfileUsername] = useState<
     string | null
@@ -35,6 +38,10 @@ export default function App() {
   const handlePendingProfileHandled = () => {
     setPendingProfileUsername(null);
     window.history.replaceState({}, "", "/");
+  };
+
+  const handleProfileCreated = () => {
+    setPwaBannerTrigger(true);
   };
 
   if (isInitializing || (isAuthenticated && profileLoading && !isFetched)) {
@@ -65,14 +72,16 @@ export default function App() {
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
       )}
-      {showProfileSetup && <ProfileSetupModal />}
+      {showProfileSetup && (
+        <ProfileSetupModal onProfileCreated={handleProfileCreated} />
+      )}
       {showMain && (
         <MainLayout
           pendingProfileUsername={pendingProfileUsername}
           onPendingProfileHandled={handlePendingProfileHandled}
         />
       )}
-      <PWAInstallBanner />
+      <PWAInstallBanner triggerShow={pwaBannerTrigger} />
     </>
   );
 }
