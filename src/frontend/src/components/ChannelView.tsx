@@ -40,7 +40,7 @@ import {
   Video,
 } from "lucide-react";
 import { Camera } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useMediaUpload } from "../hooks/useMediaUpload";
 import {
@@ -53,7 +53,10 @@ import {
   useUpdateChannel,
 } from "../hooks/useQueries";
 import type { ChannelId } from "../hooks/useQueries";
+import { markChannelAsViewed } from "../lib/channelUtils";
 import ChannelPostCard from "./ChannelPostCard";
+
+const POSTS_PAGE_SIZE = 9;
 
 function getInitials(name: string) {
   return name
@@ -240,11 +243,17 @@ export default function ChannelView({
   const [pendingMedia, setPendingMedia] = useState<File | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [postsPage, setPostsPage] = useState(1);
   const { mutateAsync: deleteChannel, isPending: deleting } =
     useDeleteChannel();
   const imageRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLInputElement>(null);
+
+  // Mark channel as viewed when opened so unread badge clears
+  useEffect(() => {
+    markChannelAsViewed(channelId.toString());
+  }, [channelId]);
 
   const isBusy = posting || isUploading;
 
@@ -309,6 +318,7 @@ export default function ChannelView({
       });
       setPostText("");
       setPendingMedia(null);
+      setPostsPage(1);
       toast.success("Post published!");
     } catch {
       toast.error("Failed to publish post");
@@ -318,6 +328,9 @@ export default function ChannelView({
   const sortedPosts = [...posts].sort(
     (a, b) => Number(b.timestamp) - Number(a.timestamp),
   );
+
+  const visiblePosts = sortedPosts.slice(0, postsPage * POSTS_PAGE_SIZE);
+  const hasMorePosts = sortedPosts.length > postsPage * POSTS_PAGE_SIZE;
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -583,7 +596,7 @@ export default function ChannelView({
       )}
 
       {/* Posts feed */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-h-0">
         <div className="p-4 flex flex-col gap-4">
           {postsLoading ? (
             <div data-ocid="channel.view.loading_state">
@@ -615,17 +628,36 @@ export default function ChannelView({
               )}
             </div>
           ) : (
-            sortedPosts.map((post, idx) => (
-              <ChannelPostCard
-                key={post.id.toString()}
-                post={post}
-                authorName={ownerProfile.displayName}
-                authorAvatar={ownerProfile.avatarUrl}
-                isOwner={isOwner}
-                currentUserId={currentUserId}
-                index={idx}
-              />
-            ))
+            <>
+              {visiblePosts.map((post, idx) => (
+                <ChannelPostCard
+                  key={post.id.toString()}
+                  post={post}
+                  authorName={ownerProfile.displayName}
+                  authorAvatar={ownerProfile.avatarUrl}
+                  isOwner={isOwner}
+                  isPostAuthor={post.author.toString() === currentUserId}
+                  currentUserId={currentUserId}
+                  channelId={channelId}
+                  index={idx}
+                />
+              ))}
+              {hasMorePosts && (
+                <button
+                  type="button"
+                  onClick={() => setPostsPage((p) => p + 1)}
+                  className="w-full py-3 text-xs font-semibold text-center rounded-xl transition-colors hover:bg-muted/30"
+                  style={{ color: "oklch(0.82 0.15 72)" }}
+                >
+                  Load{" "}
+                  {Math.min(
+                    POSTS_PAGE_SIZE,
+                    sortedPosts.length - postsPage * POSTS_PAGE_SIZE,
+                  )}{" "}
+                  more posts
+                </button>
+              )}
+            </>
           )}
         </div>
       </ScrollArea>

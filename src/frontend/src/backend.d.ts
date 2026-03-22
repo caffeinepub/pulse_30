@@ -82,6 +82,7 @@ export type ChannelCommentId = bigint;
 export interface DealerInfo {
     username: string;
     balance: bigint;
+    avatarUrl?: string;
 }
 export type CommentId = bigint;
 export interface StatusContent {
@@ -203,6 +204,7 @@ export enum UserRole {
 }
 export interface backendInterface {
     addChannelPost(channelId: ChannelId, content: ChannelPostContent): Promise<ChannelPostId>;
+    addGroupMember(conversationId: ConversationId, username: string): Promise<void>;
     addStatus(content: StatusContent): Promise<StatusId>;
     adminClaimGold(amount: bigint): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
@@ -213,7 +215,11 @@ export interface backendInterface {
     createDirectConversation(otherUser: UserId): Promise<ConversationId>;
     createGroupConversation(name: string, members: Array<UserId>, groupAvatarUrl: string | null): Promise<ConversationId>;
     deleteChannel(channelId: ChannelId): Promise<void>;
+    deleteChannelPost(postId: ChannelPostId): Promise<void>;
     deleteGroupName(conversationId: ConversationId): Promise<void>;
+    deleteMessage(conversationId: ConversationId, messageId: MessageId): Promise<void>;
+    editChannelPost(postId: ChannelPostId, newContent: ChannelPostContent): Promise<void>;
+    editMessage(conversationId: ConversationId, messageId: MessageId, newText: string): Promise<void>;
     followChannel(channelId: ChannelId): Promise<void>;
     forwardChannelPost(postId: ChannelPostId, conversationId: ConversationId): Promise<MessageId>;
     getAdminTotalClaimed(): Promise<bigint>;
@@ -227,11 +233,13 @@ export interface backendInterface {
     getContactStatuses(): Promise<Array<[UserProfile, Array<Status>]>>;
     getConversation(conversationId: ConversationId): Promise<Conversation | null>;
     getGroupAvatars(): Promise<Array<[ConversationId, string]>>;
+    getGroupCreators(): Promise<Array<[ConversationId, UserId]>>;
     getMessageReadReceipts(conversationId: ConversationId, messageId: MessageId): Promise<Array<MessageReadReceipt> | null>;
     getMessages(conversationId: ConversationId, offset: bigint, limit: bigint): Promise<Array<Message>>;
     getMyBlockedUsers(): Promise<Array<UserProfile>>;
     getMyConversations(): Promise<Array<Conversation>>;
     getMyGoldBalance(): Promise<bigint>;
+    getMyGoldTransactions(): Promise<Array<GoldTransaction>>;
     getMyNotifications(): Promise<Array<AppNotification>>;
     getMyStatuses(): Promise<Array<Status>>;
     getMyTransactionHistory(): Promise<Array<GoldTransaction>>;
@@ -251,6 +259,7 @@ export interface backendInterface {
     markAsRead(conversationId: ConversationId): Promise<void>;
     markMessagesAsRead(conversationId: ConversationId): Promise<void>;
     markNotificationsRead(): Promise<void>;
+    removeGroupMember(conversationId: ConversationId, memberId: UserId): Promise<void>;
     requestBuyGold(amount: bigint): Promise<void>;
     requestSellGold(amount: bigint): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
@@ -258,6 +267,10 @@ export interface backendInterface {
         userId: UserId;
         profile: UserProfile;
     } | null>;
+    searchUsers(searchQuery: string): Promise<Array<{
+        userId: UserId;
+        profile: UserProfile;
+    }>>;
     sendMessage(conversationId: ConversationId, messageInput: MessageInput): Promise<MessageId>;
     transferGold(toUsername: string, amount: bigint): Promise<void>;
     unblockUser(targetUserId: UserId): Promise<void>;

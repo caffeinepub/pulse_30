@@ -67,7 +67,11 @@ export interface Conversation {
 export type ConversationId = bigint;
 export type ConversationType = { 'group' : string } |
   { 'direct' : null };
-export interface DealerInfo { 'username' : string, 'balance' : bigint, 'avatarUrl' : [] | [string] }
+export interface DealerInfo {
+  'username' : string,
+  'balance' : bigint,
+  'avatarUrl' : [] | [string],
+}
 export interface GoldTransaction {
   'id' : GoldTxId,
   'timestamp' : Timestamp,
@@ -192,6 +196,7 @@ export interface _SERVICE {
     [ChannelId, ChannelPostContent],
     ChannelPostId
   >,
+  'addGroupMember' : ActorMethod<[ConversationId, string], undefined>,
   'addStatus' : ActorMethod<[StatusContent], StatusId>,
   'adminClaimGold' : ActorMethod<[bigint], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
@@ -208,7 +213,14 @@ export interface _SERVICE {
     ConversationId
   >,
   'deleteChannel' : ActorMethod<[ChannelId], undefined>,
+  'deleteChannelPost' : ActorMethod<[ChannelPostId], undefined>,
   'deleteGroupName' : ActorMethod<[ConversationId], undefined>,
+  'deleteMessage' : ActorMethod<[ConversationId, MessageId], undefined>,
+  'editChannelPost' : ActorMethod<
+    [ChannelPostId, ChannelPostContent],
+    undefined
+  >,
+  'editMessage' : ActorMethod<[ConversationId, MessageId, string], undefined>,
   'followChannel' : ActorMethod<[ChannelId], undefined>,
   'forwardChannelPost' : ActorMethod<
     [ChannelPostId, ConversationId],
@@ -228,6 +240,7 @@ export interface _SERVICE {
   'getContactStatuses' : ActorMethod<[], Array<[UserProfile, Array<Status>]>>,
   'getConversation' : ActorMethod<[ConversationId], [] | [Conversation]>,
   'getGroupAvatars' : ActorMethod<[], Array<[ConversationId, string]>>,
+  'getGroupCreators' : ActorMethod<[], Array<[ConversationId, UserId]>>,
   'getMessageReadReceipts' : ActorMethod<
     [ConversationId, MessageId],
     [] | [Array<MessageReadReceipt>]
@@ -236,6 +249,7 @@ export interface _SERVICE {
   'getMyBlockedUsers' : ActorMethod<[], Array<UserProfile>>,
   'getMyConversations' : ActorMethod<[], Array<Conversation>>,
   'getMyGoldBalance' : ActorMethod<[], bigint>,
+  'getMyGoldTransactions' : ActorMethod<[], Array<GoldTransaction>>,
   'getMyNotifications' : ActorMethod<[], Array<AppNotification>>,
   'getMyStatuses' : ActorMethod<[], Array<Status>>,
   'getMyTransactionHistory' : ActorMethod<[], Array<GoldTransaction>>,
@@ -252,15 +266,13 @@ export interface _SERVICE {
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'isUserOnline' : ActorMethod<[UserId], boolean>,
   'leaveConversation' : ActorMethod<[ConversationId], undefined>,
-  'addGroupMember' : ActorMethod<[ConversationId, string], undefined>,
-  'removeGroupMember' : ActorMethod<[ConversationId, UserId], undefined>,
-  'getGroupCreators' : ActorMethod<[], Array<[ConversationId, UserId]>>,
   'likeChannelPost' : ActorMethod<[ChannelPostId], undefined>,
   'likeStatus' : ActorMethod<[StatusId], undefined>,
   'listUserConversations' : ActorMethod<[], Array<Conversation>>,
   'markAsRead' : ActorMethod<[ConversationId], undefined>,
   'markMessagesAsRead' : ActorMethod<[ConversationId], undefined>,
   'markNotificationsRead' : ActorMethod<[], undefined>,
+  'removeGroupMember' : ActorMethod<[ConversationId, UserId], undefined>,
   'requestBuyGold' : ActorMethod<[bigint], undefined>,
   'requestSellGold' : ActorMethod<[bigint], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
@@ -268,7 +280,10 @@ export interface _SERVICE {
     [string],
     [] | [{ 'userId' : UserId, 'profile' : UserProfile }]
   >,
-  'searchUsers' : ActorMethod<[string], Array<{ 'userId' : UserId, 'profile' : UserProfile }>>,
+  'searchUsers' : ActorMethod<
+    [string],
+    Array<{ 'userId' : UserId, 'profile' : UserProfile }>
+  >,
   'sendMessage' : ActorMethod<[ConversationId, MessageInput], MessageId>,
   'transferGold' : ActorMethod<[string, bigint], undefined>,
   'unblockUser' : ActorMethod<[UserId], undefined>,

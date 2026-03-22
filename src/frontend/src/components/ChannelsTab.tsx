@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -7,12 +8,14 @@ import { useState } from "react";
 import {
   useFollowChannel,
   useGetAllChannels,
+  useGetChannelPosts,
   useUnfollowChannel,
 } from "../hooks/useQueries";
 import type { ChannelId, ChannelWithMeta } from "../hooks/useQueries";
+import { getChannelLastViewed } from "../lib/channelUtils";
 import CreateChannelModal from "./CreateChannelModal";
 
-const PAGE_SIZE = 19;
+const PAGE_SIZE = 9;
 
 function getInitials(name: string) {
   return name
@@ -21,6 +24,33 @@ function getInitials(name: string) {
     .join("")
     .toUpperCase()
     .slice(0, 2);
+}
+
+/**
+ * Fetches posts for a single followed channel and returns the unread count badge.
+ * Only rendered for isFollowing channels to avoid unnecessary queries.
+ */
+function ChannelUnreadBadge({ channelId }: { channelId: ChannelId }) {
+  const { data: posts = [] } = useGetChannelPosts(channelId);
+  const lastViewed = getChannelLastViewed(channelId.toString());
+  const unreadCount = posts.filter(
+    (p) => Number(p.timestamp) / 1_000_000 > lastViewed,
+  ).length;
+
+  if (unreadCount === 0) return null;
+
+  return (
+    <Badge
+      className="ml-2 min-w-[20px] h-5 flex items-center justify-center text-xs shrink-0 px-1.5"
+      style={{
+        background:
+          "linear-gradient(135deg, oklch(0.76 0.13 72), oklch(0.65 0.11 65))",
+        color: "oklch(0.08 0.004 55)",
+      }}
+    >
+      {unreadCount > 99 ? "99+" : unreadCount}
+    </Badge>
+  );
 }
 
 function ChannelCard({
@@ -103,6 +133,9 @@ function ChannelCard({
             >
               Owner
             </span>
+          )}
+          {isFollowing && !isOwner && (
+            <ChannelUnreadBadge channelId={channel.id} />
           )}
         </div>
         <p className="text-xs text-muted-foreground truncate">

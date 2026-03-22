@@ -89,11 +89,6 @@ export default function PWAInstallBanner({ triggerShow = false }: Props) {
               boxShadow: "0 -4px 24px oklch(0.76 0.13 72 / 0.12)",
             }}
           >
-            <img
-              src="/assets/generated/icon-192.dim_192x192.png"
-              alt="Pulse"
-              className="w-10 h-10 rounded-xl shrink-0 object-contain"
-            />
             <div className="flex-1 min-w-0">
               <p
                 className="text-sm font-semibold leading-snug"

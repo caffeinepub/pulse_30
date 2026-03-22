@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Conversation, ConversationId, UserProfile } from "../backend";
+import { useActor } from "../hooks/useActor";
 import {
   useCreateDirectConversation,
   useGetGroupAvatars,
@@ -32,17 +33,19 @@ import {
   useSearchUserByUsername,
   useSearchUsers,
 } from "../hooks/useQueries";
-import type { ChannelId } from "../hooks/useQueries";
+import type {
+  ChannelId,
+  ChannelPost,
+  ChannelWithMeta,
+} from "../hooks/useQueries";
 import { useQRScanner } from "../qr-code/useQRScanner";
 import ChannelsTab from "./ChannelsTab";
 import EditProfileModal from "./EditProfileModal";
 import NewChatModal from "./NewChatModal";
+import NotificationBell from "./NotificationBell";
 import StatusView from "./StatusView";
 import UserProfileModal from "./UserProfileModal";
 import WalletTab from "./WalletTab";
-
-const LOGO_URL =
-  "https://blob.caffeine.ai/v1/blob/?blob_hash=sha256%3Af72c8b1872b6c4c4a2ee4171776af79904dde692e1b3500eebb353d12ca04068&owner_id=ogfnt-tqaaa-aaaae-afuja-cai&project_id=019ce73e-4cef-72bc-b1e2-2c9b46b1e1f9";
 
 function getInitials(name: string) {
   return name
@@ -442,6 +445,9 @@ export default function Sidebar({
   const [msgSearchResults, setMsgSearchResults] = useState<
     Array<{ convId: string; convName: string; msgText: string }>
   >([]);
+  const [postSearchResults, setPostSearchResults] = useState<
+    Array<{ channelId: bigint; channelName: string; postText: string }>
+  >([]);
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("chats");
@@ -458,6 +464,7 @@ export default function Sidebar({
   const { mutateAsync: searchUsers } = useSearchUsers();
   const { mutateAsync: createDirectConversation } =
     useCreateDirectConversation();
+  const { actor } = useActor();
 
   const groupAvatarMap = useMemo(() => {
     const m = new Map<string, string>();
@@ -525,11 +532,6 @@ export default function Sidebar({
       <div className="px-4 pt-5 pb-3 border-b border-border shrink-0">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <img
-              src={LOGO_URL}
-              alt="Pulse"
-              className="w-8 h-8 object-contain rounded-lg"
-            />
             <span className="font-display text-xl font-bold gold-shimmer">
               Pulse
             </span>
@@ -587,9 +589,48 @@ export default function Sidebar({
                           if (msgResults.length >= 5) break;
                         }
                         setMsgSearchResults(msgResults);
+                        // Search channel posts
+                        if (actor) {
+                          try {
+                            const channels = (await (
+                              actor as any
+                            ).getAllChannels()) as any[];
+                            const postResults: Array<{
+                              channelId: bigint;
+                              channelName: string;
+                              postText: string;
+                            }> = [];
+                            for (const ch of channels.slice(0, 15)) {
+                              const posts = (await (
+                                actor as any
+                              ).getChannelPosts(ch.channel.id)) as any[];
+                              for (const post of posts.slice(-30)) {
+                                if (
+                                  (post.content?.text ?? "")
+                                    .toLowerCase()
+                                    .includes(qLow)
+                                ) {
+                                  postResults.push({
+                                    channelId: ch.channel.id as bigint,
+                                    channelName: ch.channel.name as string,
+                                    postText: (
+                                      post.content.text as string
+                                    ).slice(0, 80),
+                                  });
+                                  break;
+                                }
+                              }
+                              if (postResults.length >= 5) break;
+                            }
+                            setPostSearchResults(postResults);
+                          } catch {
+                            setPostSearchResults([]);
+                          }
+                        }
                       } else {
                         setUserSearchResults([]);
                         setMsgSearchResults([]);
+                        setPostSearchResults([]);
                       }
                     }}
                     placeholder="Search..."
@@ -605,6 +646,7 @@ export default function Sidebar({
                     setUniversalQuery("");
                     setUserSearchResults([]);
                     setMsgSearchResults([]);
+                    setPostSearchResults([]);
                   }}
                   className="h-8 w-8 rounded-xl hover:bg-muted"
                 >
@@ -647,6 +689,7 @@ export default function Sidebar({
                 </Button>
               </>
             )}
+            <NotificationBell />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -795,6 +838,7 @@ export default function Sidebar({
                         setUniversalQuery("");
                         setUserSearchResults([]);
                         setMsgSearchResults([]);
+                        setPostSearchResults([]);
                         setActiveTab("chats");
                         onSelectConversation(convId);
                       }
@@ -845,6 +889,7 @@ export default function Sidebar({
                     setUniversalQuery("");
                     setUserSearchResults([]);
                     setMsgSearchResults([]);
+                    setPostSearchResults([]);
                     onSelectConversation(BigInt(m.convId));
                   }}
                 >
@@ -866,14 +911,55 @@ export default function Sidebar({
               ))}
             </div>
           )}
-          {userSearchResults.length === 0 && msgSearchResults.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-              <Search className="h-8 w-8 mb-2 opacity-30" />
-              <p className="text-sm">
-                No results for &quot;{universalQuery}&quot;
-              </p>
+          {postSearchResults.length > 0 && (
+            <div className="mb-3">
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-1">
+                Posts
+              </div>
+              {postSearchResults.map((p, i) => (
+                <button
+                  type="button"
+                  key={p.channelId.toString()}
+                  data-ocid={`sidebar.search.post.${i + 1}`}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-muted/60 transition-colors text-left mb-1"
+                  onClick={() => {
+                    setUniversalSearchActive(false);
+                    setUniversalQuery("");
+                    setUserSearchResults([]);
+                    setMsgSearchResults([]);
+                    setPostSearchResults([]);
+                    setActiveTab("channels");
+                    onSelectChannel(p.channelId);
+                  }}
+                >
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                    style={{ background: "oklch(0.18 0.04 55)" }}
+                  >
+                    <Radio className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-foreground truncate">
+                      {p.channelName}
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {p.postText}
+                    </div>
+                  </div>
+                </button>
+              ))}
             </div>
           )}
+          {userSearchResults.length === 0 &&
+            msgSearchResults.length === 0 &&
+            postSearchResults.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+                <Search className="h-8 w-8 mb-2 opacity-30" />
+                <p className="text-sm">
+                  No results for &quot;{universalQuery}&quot;
+                </p>
+              </div>
+            )}
         </div>
       )}
 

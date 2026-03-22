@@ -9,12 +9,15 @@ import { useInternetIdentity } from "./useInternetIdentity";
 function getCanonicalMimeType(file: File): string {
   const t = file.type;
   if (t.startsWith("video/")) {
-    return "video/mp4";
+    // video/quicktime is iPhone .MOV which is H.264 — serve as video/mp4
+    if (t === "video/quicktime" || t === "video/x-m4v") return "video/mp4";
+    return t || "video/mp4";
   }
   if (t.startsWith("audio/")) {
     if (t === "audio/mp4" || t === "audio/x-m4a") return "audio/mp4";
     if (t === "audio/ogg") return "audio/ogg";
-    return "audio/webm";
+    if (t === "audio/mpeg" || t === "audio/mp3") return "audio/mpeg";
+    return t || "audio/webm";
   }
   if (t.startsWith("image/")) return t || "image/jpeg";
   return t || "application/octet-stream";

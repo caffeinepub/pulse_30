@@ -241,10 +241,12 @@ actor {
   // Gold credit state
   let goldBalances = Map.empty<UserId, Nat>();
   let goldTransactions = Map.empty<UserId, List.List<GoldTransaction>>();
-  let notifications = Map.empty<UserId, List.List<AppNotification>>();
   var adminTotalClaimed : Nat = 0;
   let goldMaxClaim : Nat = 999_999_900;
   let adminUsername : Text = "pulse";
+
+  // Stable notifications store
+  let notifications = Map.empty<UserId, List.List<AppNotification>>();
 
   // Block System State
   let blockedUsers = Map.empty<UserId, Set.Set<UserId>>();
@@ -685,6 +687,66 @@ actor {
 
     nextMessageId += 1;
     message.id;
+  };
+
+  public shared ({ caller }) func editMessage(conversationId : ConversationId, messageId : MessageId, newText : Text) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can edit messages");
+    };
+    if (not isConversationMember(conversationId, caller)) {
+      Runtime.trap("Unauthorized: You are not a member of this conversation");
+    };
+
+    var conversation = getConversationOrTrap(conversationId);
+    let messageIndex = switch (conversation.messages.findIndex(
+      func(msg) { msg.id == messageId }
+    )) {
+      case (null) { Runtime.trap("Message not found") };
+      case (?index) { index };
+    };
+
+    let originalMessage = conversation.messages[messageIndex];
+    if (originalMessage.sender != caller) {
+      Runtime.trap("Only the sender can edit the message");
+    };
+    let updatedMsg = {
+      originalMessage with content = { originalMessage.content with text = newText };
+    };
+    let messagesArray : [var Message] = conversation.messages.toVarArray();
+    messagesArray[messageIndex] := updatedMsg;
+    let updatedConversation = { conversation with messages = messagesArray.toArray() };
+    saveConversation(updatedConversation);
+  };
+
+  public shared ({ caller }) func deleteMessage(conversationId : ConversationId, messageId : MessageId) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can delete messages");
+    };
+    if (not isConversationMember(conversationId, caller)) {
+      Runtime.trap("Unauthorized: You are not a member of this conversation");
+    };
+
+    let conversation = getConversationOrTrap(conversationId);
+    let messageIndex = switch (conversation.messages.findIndex(
+      func(msg) { msg.id == messageId }
+    )) {
+      case (null) { Runtime.trap("Message not found") };
+      case (?index) { index };
+    };
+
+    let message = conversation.messages[messageIndex];
+    if (caller != message.sender) {
+      Runtime.trap("Only the sender can delete the message");
+    };
+
+    // Remove the message at messageIndex
+    let messages = conversation.messages;
+    let before = if (messageIndex == 0) { [] } else { messages.sliceToArray(0, messageIndex) };
+    let after = if (messageIndex + 1 >= messages.size()) { [] } else { messages.sliceToArray(messageIndex + 1, messages.size()) };
+    let newMessages = before.concat(after);
+
+    let updatedConversation = { conversation with messages = newMessages };
+    saveConversation(updatedConversation);
   };
 
   public query ({ caller }) func getMessages(conversationId : ConversationId, offset : Nat, limit : Nat) : async [Message] {
@@ -1263,6 +1325,33 @@ actor {
     postId;
   };
 
+  public shared ({ caller }) func editChannelPost(postId : ChannelPostId, newContent : ChannelPostContent) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized");
+    };
+    switch (channelPosts.get(postId)) {
+      case (null) { Runtime.trap("Post not found") };
+      case (?post) {
+        if (post.author != caller) { Runtime.trap("Only the post author can edit") };
+        let updated = { id = post.id; channelId = post.channelId; author = post.author; content = newContent; timestamp = post.timestamp };
+        channelPosts.add(postId, updated);
+      };
+    };
+  };
+
+  public shared ({ caller }) func deleteChannelPost(postId : ChannelPostId) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized");
+    };
+    switch (channelPosts.get(postId)) {
+      case (null) { Runtime.trap("Post not found") };
+      case (?post) {
+        if (post.author != caller) { Runtime.trap("Only the post author can delete") };
+        channelPosts.remove(postId);
+      };
+    };
+  };
+
   public query ({ caller }) func getChannelPosts(channelId : ChannelId) : async [ChannelPost] {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can view channel posts");
@@ -1759,4 +1848,13 @@ actor {
     };
   };
 
+  public query ({ caller }) func getMyGoldTransactions() : async [GoldTransaction] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized");
+    };
+    switch (goldTransactions.get(caller)) {
+      case (null) { [] };
+      case (?lst) { lst.toArray() };
+    };
+  };
 };

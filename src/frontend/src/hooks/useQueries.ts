@@ -196,6 +196,47 @@ export function useSendMessage() {
   });
 }
 
+export function useEditMessage(conversationId: ConversationId | null) {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      messageId,
+      newText,
+    }: { messageId: bigint; newText: string }) => {
+      if (!actor) throw new Error("Actor not available");
+      await extActor(actor).editMessage(
+        BigInt(conversationId!),
+        messageId,
+        newText,
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["messages", conversationId?.toString()],
+      });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+}
+
+export function useDeleteMessage(conversationId: ConversationId | null) {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (messageId: bigint) => {
+      if (!actor) throw new Error("Actor not available");
+      await extActor(actor).deleteMessage(BigInt(conversationId!), messageId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["messages", conversationId?.toString()],
+      });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+}
+
 export function useCreateDirectConversation() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
@@ -671,6 +712,41 @@ export function useDeleteChannel() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["channels"] });
+    },
+  });
+}
+
+export function useDeleteChannelPost(channelId: ChannelId | null) {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (postId: ChannelPostId) => {
+      if (!actor) throw new Error("Actor not available");
+      await extActor(actor).deleteChannelPost(postId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["channelPosts", channelId?.toString()],
+      });
+    },
+  });
+}
+
+export function useEditChannelPost(channelId: ChannelId | null) {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      postId,
+      content,
+    }: { postId: ChannelPostId; content: ChannelPostContent }) => {
+      if (!actor) throw new Error("Actor not available");
+      await extActor(actor).editChannelPost(postId, content);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["channelPosts", channelId?.toString()],
+      });
     },
   });
 }

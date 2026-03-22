@@ -1139,7 +1139,7 @@ export default function ChatView({
             if (!v) setGroupAvatarPreview(null);
           }}
         >
-          <DialogContent className="bg-card border-border max-h-[90dvh] overflow-y-auto">
+          <DialogContent className="bg-card border-border">
             <DialogHeader>
               <DialogTitle>Edit Group</DialogTitle>
             </DialogHeader>
@@ -1274,20 +1274,7 @@ export default function ChatView({
                   </ScrollArea>
 
                   {/* Add member */}
-                  <div
-                    className="flex gap-2"
-                    onPointerDown={(e) => {
-                      if (
-                        (e.target as HTMLElement).tagName !== "INPUT" &&
-                        (e.target as HTMLElement).tagName !== "BUTTON"
-                      ) {
-                        const inp = (
-                          e.currentTarget as HTMLElement
-                        ).querySelector("input");
-                        inp?.focus();
-                      }
-                    }}
-                  >
+                  <div className="flex gap-2">
                     <Input
                       data-ocid="chat.add_member.input"
                       placeholder="Username to add..."
@@ -1297,9 +1284,6 @@ export default function ChatView({
                         setAddMemberError("");
                       }}
                       className="bg-input border-border text-sm"
-                      autoComplete="off"
-                      inputMode="text"
-                      style={{ touchAction: "manipulation" }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.preventDefault();
