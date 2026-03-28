@@ -211,42 +211,42 @@ actor {
   };
 
   // State Management
-  var nextConversationId : ConversationId = 1;
-  var nextMessageId : MessageId = 1;
-  var nextStatusId : StatusId = 1;
-  var nextCommentId : CommentId = 1;
-  var nextChannelId : ChannelId = 1;
-  var nextChannelPostId : ChannelPostId = 1;
-  var nextChannelCommentId : ChannelCommentId = 1;
-  var nextGoldTxId : GoldTxId = 1;
-  var nextNotificationId : NotificationId = 1;
+  stable var nextConversationId : ConversationId = 1;
+  stable var nextMessageId : MessageId = 1;
+  stable var nextStatusId : StatusId = 1;
+  stable var nextCommentId : CommentId = 1;
+  stable var nextChannelId : ChannelId = 1;
+  stable var nextChannelPostId : ChannelPostId = 1;
+  stable var nextChannelCommentId : ChannelCommentId = 1;
+  stable var nextGoldTxId : GoldTxId = 1;
+  stable var nextNotificationId : NotificationId = 1;
 
-  let conversations = Map.empty<ConversationId, Conversation>();
-  let users = Map.empty<UserId, UserProfile>();
-  let statuses = Map.empty<StatusId, Status>();
-  let statusLikes = Map.empty<StatusId, Set.Set<UserId>>();
-  let statusComments = Map.empty<CommentId, StatusComment>();
+  stable let conversations = Map.empty<ConversationId, Conversation>();
+  stable let users = Map.empty<UserId, UserProfile>();
+  stable let statuses = Map.empty<StatusId, Status>();
+  stable let statusLikes = Map.empty<StatusId, Set.Set<UserId>>();
+  stable let statusComments = Map.empty<CommentId, StatusComment>();
 
   // Group avatar storage (separate from Conversation to preserve stable compatibility)
-  let groupAvatars = Map.empty<ConversationId, Text>();
-  let groupCreators = Map.empty<ConversationId, UserId>();
+  stable let groupAvatars = Map.empty<ConversationId, Text>();
+  stable let groupCreators = Map.empty<ConversationId, UserId>();
 
   // Channel state
-  let channels = Map.empty<ChannelId, Channel>();
-  let channelPosts = Map.empty<ChannelPostId, ChannelPost>();
-  let channelFollowers = Map.empty<ChannelId, Set.Set<UserId>>();
-  let channelPostLikes = Map.empty<ChannelPostId, Set.Set<UserId>>();
-  let channelComments = Map.empty<ChannelCommentId, ChannelComment>();
+  stable let channels = Map.empty<ChannelId, Channel>();
+  stable let channelPosts = Map.empty<ChannelPostId, ChannelPost>();
+  stable let channelFollowers = Map.empty<ChannelId, Set.Set<UserId>>();
+  stable let channelPostLikes = Map.empty<ChannelPostId, Set.Set<UserId>>();
+  stable let channelComments = Map.empty<ChannelCommentId, ChannelComment>();
 
   // Gold credit state
-  let goldBalances = Map.empty<UserId, Nat>();
-  let goldTransactions = Map.empty<UserId, List.List<GoldTransaction>>();
-  var adminTotalClaimed : Nat = 0;
+  stable let goldBalances = Map.empty<UserId, Nat>();
+  stable let goldTransactions = Map.empty<UserId, List.List<GoldTransaction>>();
+  stable var adminTotalClaimed : Nat = 0;
   let goldMaxClaim : Nat = 999_999_900;
   let adminUsername : Text = "pulse";
 
   // Stable notifications store
-  let notifications = Map.empty<UserId, List.List<AppNotification>>();
+  stable let notifications = Map.empty<UserId, List.List<AppNotification>>();
 
   // Block System State
   let blockedUsers = Map.empty<UserId, Set.Set<UserId>>();
@@ -334,8 +334,8 @@ actor {
       Runtime.trap("You cannot block yourself");
     };
 
-    let callerProfile = getUserProfileOrTrap(caller);
-    let targetProfile = getUserProfileOrTrap(targetUserId);
+    let _callerProfile = getUserProfileOrTrap(caller);
+    let _targetProfile = getUserProfileOrTrap(targetUserId);
 
     let blocked = switch (blockedUsers.get(caller)) {
       case (null) {
@@ -355,8 +355,8 @@ actor {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can unblock other users");
     };
-    let callerProfile = getUserProfileOrTrap(caller);
-    let targetProfile = getUserProfileOrTrap(targetUserId);
+    let _callerProfile = getUserProfileOrTrap(caller);
+    let _targetProfile = getUserProfileOrTrap(targetUserId);
 
     switch (blockedUsers.get(caller)) {
       case (null) {
@@ -1727,7 +1727,7 @@ actor {
             id;
           };
         };
-        let msgText = "[Gold Request] @" # callerProfile.username # " wants to BUY " # amount.toText() # " Gold";
+        let whole = amount / 100; let frac = amount % 100; let fracText = if (frac < 10) { "0" # frac.toText() } else { frac.toText() }; let goldAmtText = whole.toText() # "." # fracText; let msgText = "[Gold Request] @" # callerProfile.username # " wants to BUY " # goldAmtText # " Gold";
         let msg = {
           id = nextMessageId;
           sender = caller;
@@ -1778,7 +1778,7 @@ actor {
             id;
           };
         };
-        let msgText = "[Gold Request] @" # callerProfile.username # " wants to SELL " # amount.toText() # " Gold";
+        let whole2 = amount / 100; let frac2 = amount % 100; let fracText2 = if (frac2 < 10) { "0" # frac2.toText() } else { frac2.toText() }; let goldAmtText2 = whole2.toText() # "." # fracText2; let msgText = "[Gold Request] @" # callerProfile.username # " wants to SELL " # goldAmtText2 # " Gold";
         let msg = {
           id = nextMessageId;
           sender = caller;

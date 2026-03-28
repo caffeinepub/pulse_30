@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Edit,
+  ExternalLink,
   Heart,
   Loader2,
   MessageCircle,
@@ -70,6 +71,13 @@ function formatTime(ts: bigint): string {
   return new Date(ms).toLocaleDateString();
 }
 
+function extractYouTubeId(url: string): string | null {
+  const pattern =
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([^&?/\s]+)/;
+  const m = url.match(pattern);
+  return m ? m[1] : null;
+}
+
 interface ChannelPostCardProps {
   post: ChannelPost;
   authorName: string;
@@ -85,7 +93,7 @@ export default function ChannelPostCard({
   post,
   authorName,
   authorAvatar,
-  isOwner,
+  isOwner: _isOwner,
   isPostAuthor,
   currentUserId,
   channelId,
@@ -97,6 +105,7 @@ export default function ChannelPostCard({
   const [editOpen, setEditOpen] = useState(false);
   const [editText, setEditText] = useState(post.content.text);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [showFullText, setShowFullText] = useState(false);
 
   const { data: interactions } = useGetChannelPostInteractions(post.id);
   const likePost = useLikeChannelPost();
@@ -148,6 +157,8 @@ export default function ChannelPostCard({
   };
 
   const mediaKind = post.content.mediaType?.__kind__;
+  const embedVariant =
+    mediaKind === "other" ? (post.content.mediaType as any)?.other : null;
   const ocid = index + 1;
 
   return (
@@ -176,7 +187,7 @@ export default function ChannelPostCard({
           </p>
         </div>
 
-        {/* Edit/Delete menu for owner */}
+        {/* Edit/Delete menu for post author */}
         {isPostAuthor && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -215,13 +226,34 @@ export default function ChannelPostCard({
       </div>
 
       {/* Text content */}
-      {post.content.text && (
-        <p className="px-4 pb-3 text-sm text-foreground/90 leading-relaxed">
-          {post.content.text}
-        </p>
-      )}
+      {post.content.text &&
+        (() => {
+          const words = post.content.text.trim().split(/\s+/);
+          const isLong = words.length > 69;
+          const displayText =
+            isLong && !showFullText
+              ? `${words.slice(0, 69).join(" ")}…`
+              : post.content.text;
+          return (
+            <div className="px-4 pb-3">
+              <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">
+                {displayText}
+              </p>
+              {isLong && (
+                <button
+                  type="button"
+                  onClick={() => setShowFullText(!showFullText)}
+                  className="text-xs font-semibold mt-1"
+                  style={{ color: "oklch(0.82 0.15 72)" }}
+                >
+                  {showFullText ? "Show less" : "Read more"}
+                </button>
+              )}
+            </div>
+          );
+        })()}
 
-      {/* Media */}
+      {/* Image media */}
       {post.content.mediaUrl && mediaKind === "image" && (
         <img
           src={post.content.mediaUrl}
@@ -230,6 +262,7 @@ export default function ChannelPostCard({
         />
       )}
 
+      {/* Video media */}
       {post.content.mediaUrl && mediaKind === "video" && (
         // biome-ignore lint/a11y/useMediaCaption: user-uploaded content
         <video
@@ -243,6 +276,7 @@ export default function ChannelPostCard({
         />
       )}
 
+      {/* Audio media */}
       {post.content.mediaUrl && mediaKind === "audio" && (
         // biome-ignore lint/a11y/useMediaCaption: user-uploaded content
         <audio
@@ -252,13 +286,85 @@ export default function ChannelPostCard({
         />
       )}
 
+      {/* YouTube embed */}
+      {post.content.mediaUrl &&
+        mediaKind === "other" &&
+        embedVariant === "embedYouTube" &&
+        (() => {
+          const videoId = extractYouTubeId(post.content.mediaUrl!);
+          if (!videoId) return null;
+          return (
+            <div className="px-4 pb-3">
+              <iframe
+                src={`https://www.youtube.com/embed/${videoId}`}
+                className="w-full aspect-video rounded-xl"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                title="YouTube video"
+              />
+            </div>
+          );
+        })()}
+
+      {/* TikTok embed */}
+      {post.content.mediaUrl &&
+        mediaKind === "other" &&
+        embedVariant === "embedTikTok" && (
+          <a
+            href={post.content.mediaUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 p-3 mx-4 mb-3 rounded-xl border border-border bg-muted/30 hover:bg-muted/50 transition-colors"
+          >
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+              style={{ background: "#010101" }}
+            >
+              <span className="text-white text-xs font-bold">TT</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold">TikTok Video</p>
+              <p className="text-xs text-muted-foreground truncate">
+                {post.content.mediaUrl}
+              </p>
+            </div>
+            <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
+          </a>
+        )}
+
+      {/* X / Twitter embed */}
+      {post.content.mediaUrl &&
+        mediaKind === "other" &&
+        embedVariant === "embedX" && (
+          <a
+            href={post.content.mediaUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 p-3 mx-4 mb-3 rounded-xl border border-border bg-muted/30 hover:bg-muted/50 transition-colors"
+          >
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+              style={{ background: "#000" }}
+            >
+              <span className="text-white text-xs font-bold">𝕏</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold">Post on X</p>
+              <p className="text-xs text-muted-foreground truncate">
+                {post.content.mediaUrl}
+              </p>
+            </div>
+            <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
+          </a>
+        )}
+
       {/* Action bar */}
       <div className="flex items-center gap-1 px-3 py-2 border-t border-border/50">
         <button
           type="button"
           data-ocid={`channel.post.toggle.${ocid}`}
           onClick={handleLike}
-          disabled={isOwner}
+          disabled={isPostAuthor}
           className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-muted/50 transition-colors disabled:opacity-40"
           aria-label={likedByMe ? "Unlike" : "Like"}
         >
@@ -339,7 +445,7 @@ export default function ChannelPostCard({
             </div>
           )}
 
-          {!isOwner && (
+          {!isPostAuthor && (
             <div className="flex gap-2">
               <Input
                 data-ocid={`channel.post.input.${ocid}`}

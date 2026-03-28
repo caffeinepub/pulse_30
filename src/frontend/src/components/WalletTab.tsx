@@ -188,8 +188,9 @@ export default function WalletTab({
     useGetMyTransactionHistory();
   const { data: totalClaimed, isLoading: claimedLoading } =
     useGetAdminTotalClaimed();
+  // 99 Gold = 9900 raw units (1 Gold = 100 raw)
   const { data: dealers, isLoading: dealersLoading } = useGetUsersWithGoldAbove(
-    BigInt(99),
+    BigInt(9900),
   );
 
   const adminClaim = useAdminClaimGold();
@@ -199,6 +200,7 @@ export default function WalletTab({
   const [buyOpen, setBuyOpen] = useState(false);
   const [sellOpen, setSellOpen] = useState(false);
   const [claimOpen, setClaimOpen] = useState(false);
+  const [txPage, setTxPage] = useState(1);
 
   const [buyAmount, setBuyAmount] = useState("");
   const [sellAmount, setSellAmount] = useState("");
@@ -263,6 +265,16 @@ export default function WalletTab({
     ? [...transactions].sort(
         (a, b) => Number(b.timestamp) - Number(a.timestamp),
       )
+    : [];
+
+  const visibleTransactions = sortedTransactions.slice(0, txPage * 9);
+  const hasMoreTx = visibleTransactions.length < sortedTransactions.length;
+
+  // Sort dealers high to low
+  const sortedDealers = dealers
+    ? (dealers as any[])
+        .filter((d: any) => d.username !== currentUsername)
+        .sort((a: any, b: any) => Number(b.balance) - Number(a.balance))
     : [];
 
   return (
@@ -445,7 +457,7 @@ export default function WalletTab({
                 <Skeleton key={i} className="h-14 w-full rounded-xl" />
               ))}
             </div>
-          ) : !dealers || (dealers as any[]).length === 0 ? (
+          ) : sortedDealers.length === 0 ? (
             <div
               className="flex items-center justify-center py-6 rounded-xl text-sm text-muted-foreground"
               style={{ border: "1px dashed oklch(0.82 0.15 72 / 0.15)" }}
@@ -455,56 +467,54 @@ export default function WalletTab({
             </div>
           ) : (
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
-              {(dealers as any[])
-                .filter((d: any) => d.username !== currentUsername)
-                .map((dealer: any, i: number) => (
-                  <div
-                    key={dealer.username ?? i}
-                    className="flex flex-col items-center gap-2 p-3 rounded-xl shrink-0 min-w-[100px]"
-                    style={{
-                      background: "oklch(0.16 0.03 55 / 0.7)",
-                      border: "1px solid oklch(0.82 0.15 72 / 0.15)",
-                    }}
-                    data-ocid={`wallet.dealers.item.${i + 1}`}
+              {sortedDealers.map((dealer: any, i: number) => (
+                <div
+                  key={dealer.username ?? i}
+                  className="flex flex-col items-center gap-2 p-3 rounded-xl shrink-0 min-w-[100px]"
+                  style={{
+                    background: "oklch(0.16 0.03 55 / 0.7)",
+                    border: "1px solid oklch(0.82 0.15 72 / 0.15)",
+                  }}
+                  data-ocid={`wallet.dealers.item.${i + 1}`}
+                >
+                  {/* Avatar */}
+                  {dealer.avatarUrl ? (
+                    <Avatar className="w-10 h-10 shrink-0">
+                      <AvatarImage
+                        src={dealer.avatarUrl}
+                        alt={dealer.username}
+                      />
+                    </Avatar>
+                  ) : null}
+                  {/* Username */}
+                  <span
+                    className="text-xs font-bold truncate max-w-[80px] text-center"
+                    style={{ color: "oklch(0.82 0.15 72)" }}
                   >
-                    {/* Avatar */}
-                    {dealer.avatarUrl ? (
-                      <Avatar className="w-10 h-10 shrink-0">
-                        <AvatarImage
-                          src={dealer.avatarUrl}
-                          alt={dealer.username}
-                        />
-                      </Avatar>
-                    ) : null}
-                    {/* Username */}
-                    <span
-                      className="text-xs font-bold truncate max-w-[80px] text-center"
-                      style={{ color: "oklch(0.82 0.15 72)" }}
-                    >
-                      @{dealer.username}
-                    </span>
-                    {/* Balance */}
-                    <span className="text-xs text-muted-foreground">
-                      {formatGold(dealer.balance ?? BigInt(0))}
-                    </span>
-                    {/* Chat Button */}
-                    <Button
-                      size="sm"
-                      className="h-7 gap-1 text-xs px-2 w-full"
-                      style={{
-                        background:
-                          "linear-gradient(135deg, oklch(0.76 0.13 72 / 0.2), oklch(0.65 0.11 65 / 0.15))",
-                        color: "oklch(0.82 0.15 72)",
-                        border: "1px solid oklch(0.76 0.13 72 / 0.3)",
-                      }}
-                      onClick={() => onOpenChat(dealer.username)}
-                      data-ocid={`wallet.dealers.chat_button.${i + 1}`}
-                    >
-                      <MessageCircle className="h-3 w-3" />
-                      Chat
-                    </Button>
-                  </div>
-                ))}
+                    @{dealer.username}
+                  </span>
+                  {/* Balance */}
+                  <span className="text-xs text-muted-foreground">
+                    {formatGold(dealer.balance ?? BigInt(0))}
+                  </span>
+                  {/* Chat Button */}
+                  <Button
+                    size="sm"
+                    className="h-7 gap-1 text-xs px-2 w-full"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, oklch(0.76 0.13 72 / 0.2), oklch(0.65 0.11 65 / 0.15))",
+                      color: "oklch(0.82 0.15 72)",
+                      border: "1px solid oklch(0.76 0.13 72 / 0.3)",
+                    }}
+                    onClick={() => onOpenChat(dealer.username)}
+                    data-ocid={`wallet.dealers.chat_button.${i + 1}`}
+                  >
+                    <MessageCircle className="h-3 w-3" />
+                    Chat
+                  </Button>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -550,7 +560,7 @@ export default function WalletTab({
             </div>
           ) : (
             <div className="space-y-2 pb-6">
-              {sortedTransactions.map((tx, i) => (
+              {visibleTransactions.map((tx, i) => (
                 <div
                   key={tx.id.toString()}
                   className="flex items-center gap-3 rounded-xl px-3 py-3 transition-colors hover:bg-muted/40"
@@ -596,6 +606,21 @@ export default function WalletTab({
                   </div>
                 </div>
               ))}
+              {hasMoreTx && (
+                <button
+                  type="button"
+                  data-ocid="wallet.transactions.pagination_next"
+                  onClick={() => setTxPage((p) => p + 1)}
+                  className="w-full py-2.5 text-sm font-semibold rounded-xl transition-colors hover:opacity-90"
+                  style={{
+                    color: "oklch(0.82 0.15 72)",
+                    border: "1px solid oklch(0.82 0.15 72 / 0.25)",
+                    background: "oklch(0.16 0.03 55 / 0.5)",
+                  }}
+                >
+                  View more
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Loader2, MessageCircle, Shield, Users, Zap } from "lucide-react";
+import { Loader2, MessageCircle, Radio, Shield, Users } from "lucide-react";
 import { motion } from "motion/react";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 
@@ -10,7 +10,7 @@ export default function AuthScreen() {
     { icon: MessageCircle, text: "Real-time messaging" },
     { icon: Users, text: "Group conversations" },
     { icon: Shield, text: "Secure & private" },
-    { icon: Zap, text: "Lightning fast" },
+    { icon: Radio, text: "Discover channels" },
   ];
 
   return (
