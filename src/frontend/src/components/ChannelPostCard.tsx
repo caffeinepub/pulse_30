@@ -35,7 +35,7 @@ import {
   Share2,
   Trash2,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   useCommentOnChannelPost,
@@ -76,6 +76,202 @@ function extractYouTubeId(url: string): string | null {
     /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([^&?/\s]+)/;
   const m = url.match(pattern);
   return m ? m[1] : null;
+}
+
+function stripHtmlTags(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .trim();
+}
+
+interface TikTokOEmbed {
+  thumbnail_url?: string;
+  author_name?: string;
+  title?: string;
+}
+
+interface XOEmbed {
+  author_name?: string;
+  author_url?: string;
+  html?: string;
+}
+
+function TikTokPreviewCard({ url }: { url: string }) {
+  const [data, setData] = useState<TikTokOEmbed | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (!cancelled) setData(json as TikTokOEmbed);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  if (failed || (!data && !failed)) {
+    // While loading or on failure, show a consistent link card
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/30 hover:bg-muted/50 transition-colors"
+      >
+        <div
+          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+          style={{ background: "#010101" }}
+        >
+          <span className="text-white text-xs font-bold">TT</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold">TikTok Video</p>
+          <p className="text-xs text-muted-foreground truncate">{url}</p>
+        </div>
+        <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
+      </a>
+    );
+  }
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="block rounded-xl border border-border bg-muted/30 hover:bg-muted/50 transition-colors overflow-hidden"
+    >
+      {data?.thumbnail_url && (
+        <img
+          src={data.thumbnail_url}
+          alt={data.title || "TikTok"}
+          className="w-full max-h-48 object-cover"
+        />
+      )}
+      <div className="flex items-center gap-3 p-3">
+        <div
+          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+          style={{ background: "#010101" }}
+        >
+          <span className="text-white text-xs font-bold">TT</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          {data?.author_name && (
+            <p className="text-xs font-semibold text-foreground/80 truncate">
+              @{data.author_name}
+            </p>
+          )}
+          {data?.title && (
+            <p className="text-sm font-medium leading-snug line-clamp-2">
+              {data.title}
+            </p>
+          )}
+          <p
+            className="text-xs mt-0.5"
+            style={{ color: "oklch(0.82 0.15 72)" }}
+          >
+            Watch on TikTok
+          </p>
+        </div>
+        <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
+      </div>
+    </a>
+  );
+}
+
+function XPreviewCard({ url }: { url: string }) {
+  const [data, setData] = useState<XOEmbed | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(
+      `https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}&omit_script=true`,
+    )
+      .then((r) => r.json())
+      .then((json) => {
+        if (!cancelled) setData(json as XOEmbed);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  const tweetText = data?.html ? stripHtmlTags(data.html).slice(0, 120) : null;
+
+  if (failed || !data) {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/30 hover:bg-muted/50 transition-colors"
+      >
+        <div
+          className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+          style={{ background: "#000" }}
+        >
+          <span className="text-white text-xs font-bold">𝕏</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold">Post on X</p>
+          <p className="text-xs text-muted-foreground truncate">{url}</p>
+        </div>
+        <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
+      </a>
+    );
+  }
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="block rounded-xl border border-border bg-muted/30 hover:bg-muted/50 transition-colors overflow-hidden p-3"
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5"
+          style={{ background: "#000" }}
+        >
+          <span className="text-white text-xs font-bold">𝕏</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          {data.author_name && (
+            <p className="text-sm font-bold text-foreground">
+              {data.author_name}
+            </p>
+          )}
+          {tweetText && (
+            <p className="text-sm text-foreground/80 mt-1 leading-snug">
+              {tweetText}
+              {tweetText.length === 120 ? "…" : ""}
+            </p>
+          )}
+          <p
+            className="text-xs mt-1.5"
+            style={{ color: "oklch(0.82 0.15 72)" }}
+          >
+            View on X
+          </p>
+        </div>
+        <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+      </div>
+    </a>
+  );
 }
 
 interface ChannelPostCardProps {
@@ -255,35 +451,37 @@ export default function ChannelPostCard({
 
       {/* Image media */}
       {post.content.mediaUrl && mediaKind === "image" && (
-        <img
-          src={post.content.mediaUrl}
-          alt="Post media"
-          className="w-full max-h-80 object-cover"
-        />
+        <div className="w-full pb-3">
+          <img
+            src={post.content.mediaUrl}
+            alt="Post media"
+            className="w-full max-h-80 object-cover"
+          />
+        </div>
       )}
 
       {/* Video media */}
       {post.content.mediaUrl && mediaKind === "video" && (
-        // biome-ignore lint/a11y/useMediaCaption: user-uploaded content
-        <video
-          src={post.content.mediaUrl}
-          controls
-          muted
-          playsInline
-          data-webkit-playsinline="true"
-          className="w-full max-h-80 object-cover"
-          style={{ WebkitTransform: "translateZ(0)" }}
-        />
+        <div className="w-full pb-3">
+          {/* biome-ignore lint/a11y/useMediaCaption: user-uploaded content */}
+          <video
+            src={post.content.mediaUrl}
+            controls
+            muted
+            playsInline
+            data-webkit-playsinline="true"
+            className="w-full max-h-80 object-cover"
+            style={{ WebkitTransform: "translateZ(0)" }}
+          />
+        </div>
       )}
 
       {/* Audio media */}
       {post.content.mediaUrl && mediaKind === "audio" && (
-        // biome-ignore lint/a11y/useMediaCaption: user-uploaded content
-        <audio
-          src={post.content.mediaUrl}
-          controls
-          className="w-full px-4 pb-3"
-        />
+        <div className="px-4 pb-3">
+          {/* biome-ignore lint/a11y/useMediaCaption: user-uploaded content */}
+          <audio src={post.content.mediaUrl} controls className="w-full" />
+        </div>
       )}
 
       {/* YouTube embed */}
@@ -295,13 +493,15 @@ export default function ChannelPostCard({
           if (!videoId) return null;
           return (
             <div className="px-4 pb-3">
-              <iframe
-                src={`https://www.youtube.com/embed/${videoId}`}
-                className="w-full aspect-video rounded-xl"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                title="YouTube video"
-              />
+              <div className="w-full overflow-hidden rounded-xl">
+                <iframe
+                  src={`https://www.youtube.com/embed/${videoId}`}
+                  className="w-full aspect-video"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  title="YouTube video"
+                />
+              </div>
             </div>
           );
         })()}
@@ -310,52 +510,18 @@ export default function ChannelPostCard({
       {post.content.mediaUrl &&
         mediaKind === "other" &&
         embedVariant === "embedTikTok" && (
-          <a
-            href={post.content.mediaUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-3 p-3 mx-4 mb-3 rounded-xl border border-border bg-muted/30 hover:bg-muted/50 transition-colors"
-          >
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-              style={{ background: "#010101" }}
-            >
-              <span className="text-white text-xs font-bold">TT</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold">TikTok Video</p>
-              <p className="text-xs text-muted-foreground truncate">
-                {post.content.mediaUrl}
-              </p>
-            </div>
-            <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
-          </a>
+          <div className="px-4 pb-3">
+            <TikTokPreviewCard url={post.content.mediaUrl} />
+          </div>
         )}
 
       {/* X / Twitter embed */}
       {post.content.mediaUrl &&
         mediaKind === "other" &&
         embedVariant === "embedX" && (
-          <a
-            href={post.content.mediaUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-3 p-3 mx-4 mb-3 rounded-xl border border-border bg-muted/30 hover:bg-muted/50 transition-colors"
-          >
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-              style={{ background: "#000" }}
-            >
-              <span className="text-white text-xs font-bold">𝕏</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold">Post on X</p>
-              <p className="text-xs text-muted-foreground truncate">
-                {post.content.mediaUrl}
-              </p>
-            </div>
-            <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
-          </a>
+          <div className="px-4 pb-3">
+            <XPreviewCard url={post.content.mediaUrl} />
+          </div>
         )}
 
       {/* Action bar */}
