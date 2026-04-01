@@ -500,18 +500,18 @@ export class StorageClient {
     onProgress?: (percentage: number) => void,
     mimeType?: string,
   ): Promise<{ hash: string }> {
-    const contentType = mimeType || "application/octet-stream";
+    const resolvedMimeType = mimeType || "application/octet-stream";
     // HTTP headers for fetch requests (used for the PUT request to gateway)
     const httpHeaders: Headers = {
       "Content-Type": "application/json",
     };
     // Create a Blob from the bytes
     const file = new Blob([new Uint8Array(blobBytes)], {
-      type: contentType,
+      type: resolvedMimeType,
     });
     // File metadata headers that will be stored with the blob tree
     const fileHeaders: Headers = {
-      "Content-Type": contentType,
+      "Content-Type": resolvedMimeType,
       "Content-Length": file.size.toString(),
     };
 

@@ -26,7 +26,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Edit,
-  ExternalLink,
   Heart,
   Loader2,
   MessageCircle,
@@ -78,98 +77,9 @@ function extractYouTubeId(url: string): string | null {
   return m ? m[1] : null;
 }
 
-interface TikTokOEmbed {
-  thumbnail_url?: string;
-  author_name?: string;
-  title?: string;
-}
-
-function TikTokPreviewCard({ url }: { url: string }) {
-  const [data, setData] = useState<TikTokOEmbed | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`)
-      .then((r) => r.json())
-      .then((json) => {
-        if (!cancelled) setData(json as TikTokOEmbed);
-      })
-      .catch(() => {
-        if (!cancelled) setFailed(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [url]);
-
-  if (failed || (!data && !failed)) {
-    // While loading or on failure, show a consistent link card
-    return (
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/30 hover:bg-muted/50 transition-colors"
-      >
-        <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-          style={{ background: "#010101" }}
-        >
-          <span className="text-white text-xs font-bold">TT</span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold">TikTok Video</p>
-          <p className="text-xs text-muted-foreground truncate">{url}</p>
-        </div>
-        <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
-      </a>
-    );
-  }
-
-  return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="block rounded-xl border border-border bg-muted/30 hover:bg-muted/50 transition-colors overflow-hidden"
-    >
-      {data?.thumbnail_url && (
-        <img
-          src={data.thumbnail_url}
-          alt={data.title || "TikTok"}
-          className="w-full max-h-48 object-cover"
-        />
-      )}
-      <div className="flex items-center gap-3 p-3">
-        <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-          style={{ background: "#010101" }}
-        >
-          <span className="text-white text-xs font-bold">TT</span>
-        </div>
-        <div className="flex-1 min-w-0">
-          {data?.author_name && (
-            <p className="text-xs font-semibold text-foreground/80 truncate">
-              @{data.author_name}
-            </p>
-          )}
-          {data?.title && (
-            <p className="text-sm font-medium leading-snug line-clamp-2">
-              {data.title}
-            </p>
-          )}
-          <p
-            className="text-xs mt-0.5"
-            style={{ color: "oklch(0.82 0.15 72)" }}
-          >
-            Watch on TikTok
-          </p>
-        </div>
-        <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
-      </div>
-    </a>
-  );
+function extractTikTokId(url: string): string | null {
+  const m = url.match(/\/video\/(\d+)/);
+  return m ? m[1] : null;
 }
 
 function XEmbedCard({ url }: { url: string }) {
@@ -450,11 +360,38 @@ export default function ChannelPostCard({
       {/* TikTok embed */}
       {post.content.mediaUrl &&
         mediaKind === "other" &&
-        embedVariant === "embedTikTok" && (
-          <div className="px-4 pb-3">
-            <TikTokPreviewCard url={post.content.mediaUrl} />
-          </div>
-        )}
+        embedVariant === "embedTikTok" &&
+        (() => {
+          const videoId = extractTikTokId(post.content.mediaUrl!);
+          if (!videoId)
+            return (
+              <div className="px-4 pb-3">
+                <a
+                  href={post.content.mediaUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-muted-foreground underline"
+                >
+                  View on TikTok
+                </a>
+              </div>
+            );
+          return (
+            <div className="px-4 pb-3">
+              <div className="w-full overflow-hidden rounded-xl flex justify-center bg-black">
+                <iframe
+                  src={`https://www.tiktok.com/embed/v2/${videoId}`}
+                  className="w-full"
+                  style={{ height: "560px", maxWidth: "325px" }}
+                  allow="autoplay; encrypted-media"
+                  allowFullScreen
+                  title="TikTok video"
+                  sandbox="allow-scripts allow-same-origin allow-popups"
+                />
+              </div>
+            </div>
+          );
+        })()}
 
       {/* X / Twitter embed */}
       {post.content.mediaUrl &&
