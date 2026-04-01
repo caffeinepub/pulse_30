@@ -78,26 +78,33 @@ function extractYouTubeId(url: string): string | null {
   return m ? m[1] : null;
 }
 
-interface XOEmbed {
+interface TikTokOEmbed {
+  thumbnail_url?: string;
   author_name?: string;
-  author_url?: string;
-  html?: string;
-}
-
-declare global {
-  interface Window {
-    twttr?: {
-      widgets?: {
-        load: (el?: HTMLElement | null) => void;
-      };
-    };
-  }
+  title?: string;
 }
 
 function TikTokPreviewCard({ url }: { url: string }) {
-  const videoId = url.match(/\/video\/(\d+)/)?.[1];
+  const [data, setData] = useState<TikTokOEmbed | null>(null);
+  const [failed, setFailed] = useState(false);
 
-  if (!videoId) {
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (!cancelled) setData(json as TikTokOEmbed);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  if (failed || (!data && !failed)) {
+    // While loading or on failure, show a consistent link card
     return (
       <a
         href={url}
@@ -121,103 +128,90 @@ function TikTokPreviewCard({ url }: { url: string }) {
   }
 
   return (
-    <div className="w-full rounded-xl overflow-hidden">
-      <iframe
-        src={`https://www.tiktok.com/embed/v2/${videoId}`}
-        className="w-full"
-        style={{ height: "560px", border: "none" }}
-        allowFullScreen
-        allow="autoplay; encrypted-media"
-        title="TikTok video"
-      />
-    </div>
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="block rounded-xl border border-border bg-muted/30 hover:bg-muted/50 transition-colors overflow-hidden"
+    >
+      {data?.thumbnail_url && (
+        <img
+          src={data.thumbnail_url}
+          alt={data.title || "TikTok"}
+          className="w-full max-h-48 object-cover"
+        />
+      )}
+      <div className="flex items-center gap-3 p-3">
+        <div
+          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+          style={{ background: "#010101" }}
+        >
+          <span className="text-white text-xs font-bold">TT</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          {data?.author_name && (
+            <p className="text-xs font-semibold text-foreground/80 truncate">
+              @{data.author_name}
+            </p>
+          )}
+          {data?.title && (
+            <p className="text-sm font-medium leading-snug line-clamp-2">
+              {data.title}
+            </p>
+          )}
+          <p
+            className="text-xs mt-0.5"
+            style={{ color: "oklch(0.82 0.15 72)" }}
+          >
+            Watch on TikTok
+          </p>
+        </div>
+        <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
+      </div>
+    </a>
   );
 }
 
-function XPreviewCard({ url }: { url: string }) {
-  const [data, setData] = useState<XOEmbed | null>(null);
-  const [failed, setFailed] = useState(false);
+function XEmbedCard({ url }: { url: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const injectedRef = useRef(false);
 
   useEffect(() => {
-    let cancelled = false;
+    if (injectedRef.current || !containerRef.current) return;
+    injectedRef.current = true;
+
     fetch(
       `https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}&omit_script=true`,
     )
       .then((r) => r.json())
-      .then((json) => {
-        if (!cancelled) setData(json as XOEmbed);
+      .then((data: { html?: string }) => {
+        if (!containerRef.current || !data.html) return;
+        // Set innerHTML directly -- React never touches this div again
+        containerRef.current.innerHTML = data.html;
+        // Load (or re-run) widgets.js to upgrade the blockquote to an iframe
+        if ((window as any).twttr?.widgets) {
+          (window as any).twttr.widgets.load(containerRef.current);
+        } else {
+          const script = document.createElement("script");
+          script.src = "https://platform.twitter.com/widgets.js";
+          script.async = true;
+          script.charset = "utf-8";
+          document.head.appendChild(script);
+        }
       })
       .catch(() => {
-        if (!cancelled) setFailed(true);
+        if (containerRef.current) {
+          containerRef.current.innerHTML = `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:inherit">View post on X</a>`;
+        }
       });
-    return () => {
-      cancelled = true;
-    };
   }, [url]);
 
-  // Set innerHTML via ref so React never overwrites the Twitter iframe
-  useEffect(() => {
-    if (!data?.html || !containerRef.current) return;
-    containerRef.current.innerHTML = data.html;
-
-    const activate = () =>
-      window.twttr?.widgets?.load(containerRef.current ?? undefined);
-
-    if (!document.getElementById("twitter-widgets-script")) {
-      const script = document.createElement("script");
-      script.id = "twitter-widgets-script";
-      script.src = "https://platform.twitter.com/widgets.js";
-      script.async = true;
-      script.onload = activate;
-      document.body.appendChild(script);
-    } else {
-      activate();
-    }
-  }, [data?.html]);
-
-  if (failed) {
-    return (
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/30 hover:bg-muted/50 transition-colors"
-      >
-        <div
-          className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-          style={{ background: "#000" }}
-        >
-          <span className="text-white text-xs font-bold">𝕏</span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold">Post on X</p>
-          <p className="text-xs text-muted-foreground truncate">{url}</p>
-        </div>
-        <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
-      </a>
-    );
-  }
-
-  if (!data?.html) {
-    return (
-      <div className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/30">
-        <div
-          className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-          style={{ background: "#000" }}
-        >
-          <span className="text-white text-xs font-bold">𝕏</span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold">Loading post…</p>
-        </div>
-        <Loader2 className="h-4 w-4 text-muted-foreground shrink-0 animate-spin" />
-      </div>
-    );
-  }
-
+  // Return a div that React never re-renders children into (no children in JSX)
   return (
-    <div ref={containerRef} className="w-full rounded-xl overflow-hidden" />
+    <div
+      ref={containerRef}
+      className="px-1 pb-1 [&_iframe]:max-w-full [&_.twitter-tweet]:mx-0"
+    />
   );
 }
 
@@ -467,7 +461,7 @@ export default function ChannelPostCard({
         mediaKind === "other" &&
         embedVariant === "embedX" && (
           <div className="px-4 pb-3">
-            <XPreviewCard url={post.content.mediaUrl} />
+            <XEmbedCard url={post.content.mediaUrl} />
           </div>
         )}
 

@@ -861,7 +861,7 @@ export default function ChannelView({
 
       {/* Posts feed */}
       <ScrollArea className="flex-1 min-h-0">
-        <div className="p-4 pb-8 flex flex-col gap-4">
+        <div className="p-4 flex flex-col gap-4">
           {postsLoading ? (
             <div data-ocid="channel.view.loading_state">
               {[1, 2].map((i) => (
