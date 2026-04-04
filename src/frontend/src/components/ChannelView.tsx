@@ -77,7 +77,8 @@ function detectEmbedPlatform(url: string): "youtube" | "x" | "tiktok" | null {
   )
     return "youtube";
   if (url.includes("twitter.com/") || url.includes("x.com/")) return "x";
-  if (url.includes("tiktok.com/")) return "tiktok";
+  if (url.includes("tiktok.com/") || url.includes("vt.tiktok.com"))
+    return "tiktok";
   return null;
 }
 
