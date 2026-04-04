@@ -33,6 +33,7 @@ import {
   Check,
   CheckCheck,
   Coins,
+  CornerUpLeft,
   Edit,
   Image as ImageIcon,
   Loader2,
@@ -83,6 +84,7 @@ import {
   useUnblockUser,
   useUpdateGroupAvatar,
 } from "../hooks/useQueries";
+import { compressImage, compressVideo } from "../utils/mediaCompression";
 import UserProfileModal from "./UserProfileModal";
 
 function getInitials(name: string) {
@@ -113,6 +115,96 @@ function formatLastSeen(ts: bigint): string {
   if (diff < 86400000) return `last seen ${Math.floor(diff / 3600000)}h ago`;
   return `last seen ${new Date(ms).toLocaleDateString()}`;
 }
+
+// ─── Reply threading utilities ─────────────────────────────────────────────
+const REPLY_PREFIX = "[REPLY:";
+
+interface ParsedReply {
+  messageId: string;
+  senderName: string;
+  previewText: string;
+  bodyText: string;
+}
+
+function parseReplyFromText(rawText: string): ParsedReply | null {
+  if (!rawText.startsWith(REPLY_PREFIX)) return null;
+  const endBracket = rawText.indexOf("]");
+  if (endBracket === -1) return null;
+  const inner = rawText.slice(REPLY_PREFIX.length, endBracket);
+  // Format: messageId:senderName:previewText  (senderName and previewText may contain colons)
+  const firstColon = inner.indexOf(":");
+  if (firstColon === -1) return null;
+  const messageId = inner.slice(0, firstColon);
+  const rest = inner.slice(firstColon + 1);
+  const secondColon = rest.indexOf(":");
+  if (secondColon === -1) return null;
+  const senderName = rest.slice(0, secondColon);
+  const previewText = rest.slice(secondColon + 1);
+  const bodyText = rawText.slice(endBracket + 1).replace(/^\n/, "");
+  return { messageId, senderName, previewText, bodyText };
+}
+
+function buildReplyPrefix(
+  originalMessage: Message,
+  senderName: string,
+): string {
+  let preview: string;
+  if (originalMessage.content.mediaType) {
+    const kind = (originalMessage.content.mediaType as any).__kind__;
+    if (kind === "image") preview = "📷 Photo";
+    else if (kind === "video") preview = "🎥 Video";
+    else if (kind === "audio") preview = "🎤 Voice";
+    else preview = "📎 Media";
+  } else {
+    preview = (originalMessage.content.text ?? "")
+      .slice(0, 80)
+      .replace(/[|]/g, " ");
+  }
+  const msgId = originalMessage.id.toString();
+  const safeName = senderName.replace(/:/g, "");
+  return `[REPLY:${msgId}:${safeName}:${preview}]\n`;
+}
+
+function QuotedBlock({
+  senderName,
+  preview,
+  isSent,
+}: {
+  senderName: string;
+  preview: string;
+  isSent: boolean;
+}) {
+  return (
+    <div
+      className="flex items-stretch gap-0 rounded mb-1.5 overflow-hidden"
+      style={{
+        borderLeft: "2px solid oklch(0.76 0.13 72)",
+        background: isSent
+          ? "oklch(0.20 0.03 55 / 0.5)"
+          : "oklch(0.12 0.02 55)",
+      }}
+    >
+      <div className="px-2 py-1.5 min-w-0">
+        <div
+          className="flex items-center gap-1 mb-0.5"
+          style={{ color: "oklch(0.76 0.13 72)" }}
+        >
+          <CornerUpLeft className="h-3 w-3 shrink-0" />
+          <span className="text-[11px] font-semibold truncate">
+            {senderName}
+          </span>
+        </div>
+        <p
+          className="text-[11px] truncate"
+          style={{ color: "oklch(0.55 0.03 72)" }}
+        >
+          {preview}
+        </p>
+      </div>
+    </div>
+  );
+}
+// ───────────────────────────────────────────────────────────────────────────
 
 interface ReadReceiptIconProps {
   message: Message;
@@ -362,6 +454,7 @@ interface MessageBubbleProps {
     mediaUrl?: string;
     mediaType?: string;
   }) => void;
+  onReply?: (message: Message) => void;
   index: number;
   conversationId: ConversationId;
 }
@@ -375,6 +468,7 @@ function MessageBubble({
   onImageClick,
   onSenderClick,
   onForward,
+  onReply,
   index,
   conversationId,
 }: MessageBubbleProps) {
@@ -400,11 +494,60 @@ function MessageBubble({
 
   const senderName = senderProfile?.displayName ?? senderId.slice(0, 8);
 
+  // Reply threading: parse the [REPLY:...] prefix if present
+  const rawText = message.content.text ?? "";
+  const parsedReply = parseReplyFromText(rawText);
+  const displayText = parsedReply ? parsedReply.bodyText : rawText;
+
+  // Long-press to reply
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchStartXRef = useRef<number>(0);
+  const touchStartYRef = useRef<number>(0);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX;
+    touchStartYRef.current = e.touches[0].clientY;
+    longPressTimerRef.current = setTimeout(() => {
+      onReply?.(message);
+    }, 500);
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const dx = e.touches[0].clientX - touchStartXRef.current;
+    const dy = e.touches[0].clientY - touchStartYRef.current;
+    // If swipe right > 50px and mostly horizontal, trigger reply
+    if (dx > 50 && Math.abs(dy) < 40) {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+      onReply?.(message);
+      // reset to avoid repeated fires
+      touchStartXRef.current = 9999;
+    } else if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+      // Cancel long press on significant movement
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+    }
+  };
+
   return (
     <motion.div
       data-ocid={`chat.message.${index + 1}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchMove}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
@@ -450,6 +593,14 @@ function MessageBubble({
               : "message-bubble-received rounded-bl-sm"
           }`}
         >
+          {/* Quoted reply block */}
+          {parsedReply && (
+            <QuotedBlock
+              senderName={parsedReply.senderName}
+              preview={parsedReply.previewText}
+              isSent={isSent}
+            />
+          )}
           {message.content.mediaUrl &&
             message.content.mediaType &&
             (Date.now() - Number(message.timestamp) / 1_000_000 >
@@ -464,9 +615,9 @@ function MessageBubble({
                 onImageClick={onImageClick}
               />
             ))}
-          {message.content.text && !isEditing && (
+          {displayText && !isEditing && (
             <p className="text-sm text-foreground leading-relaxed break-words">
-              {message.content.text}
+              {displayText}
             </p>
           )}
           <div
@@ -484,26 +635,43 @@ function MessageBubble({
             />
           </div>
         </div>
-        {/* Forward button on hover */}
-        {hovered && onForward && (
-          <button
-            type="button"
-            data-ocid="chat.message.forward_button"
-            onClick={() =>
-              onForward({
-                text: message.content.text ?? "",
-                mediaUrl: message.content.mediaUrl ?? undefined,
-                mediaType: message.content.mediaType
-                  ? ((message.content.mediaType as any).__kind__ ??
-                    Object.keys(message.content.mediaType as any)[0])
-                  : undefined,
-              })
-            }
-            className="p-1.5 rounded-lg hover:bg-muted/60 transition-colors text-muted-foreground hover:text-foreground shrink-0 self-center"
-            aria-label="Forward message"
+        {/* Reply + Forward buttons on hover */}
+        {hovered && (
+          <div
+            className={`flex items-center gap-0.5 self-center ${isSent ? "flex-row-reverse" : ""}`}
           >
-            <Share2 className="h-3.5 w-3.5" />
-          </button>
+            {onReply && (
+              <button
+                type="button"
+                data-ocid="chat.message.secondary_button"
+                onClick={() => onReply(message)}
+                className="p-1.5 rounded-lg hover:bg-muted/60 transition-colors text-muted-foreground hover:text-foreground shrink-0"
+                aria-label="Reply to message"
+              >
+                <CornerUpLeft className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {onForward && (
+              <button
+                type="button"
+                data-ocid="chat.message.forward_button"
+                onClick={() =>
+                  onForward({
+                    text: displayText,
+                    mediaUrl: message.content.mediaUrl ?? undefined,
+                    mediaType: message.content.mediaType
+                      ? ((message.content.mediaType as any).__kind__ ??
+                        Object.keys(message.content.mediaType as any)[0])
+                      : undefined,
+                  })
+                }
+                className="p-1.5 rounded-lg hover:bg-muted/60 transition-colors text-muted-foreground hover:text-foreground shrink-0"
+                aria-label="Forward message"
+              >
+                <Share2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         )}
         {/* Edit/Delete menu for own messages */}
         {isSent && hovered && (
@@ -522,7 +690,13 @@ function MessageBubble({
               {message.content.text && (
                 <DropdownMenuItem
                   onClick={() => {
-                    setEditText(message.content.text ?? "");
+                    // Strip the [REPLY:...] prefix for editing
+                    const editableText =
+                      parseReplyFromText(message.content.text ?? "")
+                        ?.bodyText ??
+                      message.content.text ??
+                      "";
+                    setEditText(editableText);
                     setIsEditing(true);
                   }}
                   className="cursor-pointer"
@@ -747,6 +921,7 @@ export default function ChatView({
   } | null>(null);
   const [visibleMsgCount, setVisibleMsgCount] = useState(19);
   const [visibleMembersCount, setVisibleMembersCount] = useState(19);
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -904,7 +1079,14 @@ export default function ChatView({
 
     if (pendingFile) {
       try {
-        const result = await uploadMedia(pendingFile);
+        // Compress before upload — MIME type is always preserved
+        let fileToUpload = pendingFile;
+        if (pendingFile.type.startsWith("image/")) {
+          fileToUpload = await compressImage(pendingFile);
+        } else if (pendingFile.type.startsWith("video/")) {
+          fileToUpload = await compressVideo(pendingFile);
+        }
+        const result = await uploadMedia(fileToUpload);
         mediaUrl = result.url;
         mediaType = result.mediaType;
         clearPendingFile();
@@ -914,18 +1096,31 @@ export default function ChatView({
       }
     }
 
+    // Build message text — prepend reply prefix if replying
+    let messageText = text.trim();
+    if (replyingTo) {
+      // Get sender display name for the reply prefix
+      const replySenderName =
+        replyingTo.sender.toString() === currentUserId
+          ? "You"
+          : replyingTo.sender.toString().slice(0, 8);
+      const prefix = buildReplyPrefix(replyingTo, replySenderName);
+      messageText = prefix + messageText;
+    }
+
     try {
       await sendMessage({
         conversationId,
         messageInput: {
           content: {
-            text: text.trim(),
+            text: messageText,
             ...(mediaUrl ? { mediaUrl } : {}),
             ...(mediaType ? { mediaType } : {}),
           },
         },
       });
       setText("");
+      setReplyingTo(null);
     } catch {
       toast.error("Failed to send message");
     }
@@ -1502,6 +1697,7 @@ export default function ChatView({
                       setForwardMsgContent(msgContent);
                       setForwardMsgOpen(true);
                     }}
+                    onReply={(msg) => setReplyingTo(msg)}
                     index={idx}
                     conversationId={conversationId}
                   />
@@ -1572,6 +1768,63 @@ export default function ChatView({
                 <X className="h-3 w-3 text-destructive-foreground" />
               </button>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Reply bar */}
+      <AnimatePresence>
+        {replyingTo && (
+          <motion.div
+            data-ocid="chat.reply.panel"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="px-4 py-2 flex items-center gap-2 shrink-0"
+            style={{
+              borderLeft: "2px solid oklch(0.76 0.13 72)",
+              background: "oklch(0.14 0.02 55)",
+              borderTop: "1px solid oklch(0.82 0.15 72 / 0.1)",
+            }}
+          >
+            <CornerUpLeft
+              className="h-4 w-4 shrink-0"
+              style={{ color: "oklch(0.76 0.13 72)" }}
+            />
+            <div className="flex-1 min-w-0">
+              <p
+                className="text-[11px] font-semibold"
+                style={{ color: "oklch(0.76 0.13 72)" }}
+              >
+                Replying to{" "}
+                {replyingTo.sender.toString() === currentUserId
+                  ? "yourself"
+                  : replyingTo.sender.toString().slice(0, 8)}
+              </p>
+              <p
+                className="text-[11px] truncate"
+                style={{ color: "oklch(0.55 0.03 72)" }}
+              >
+                {replyingTo.content.mediaType
+                  ? (() => {
+                      const k = (replyingTo.content.mediaType as any).__kind__;
+                      if (k === "image") return "📷 Photo";
+                      if (k === "video") return "🎥 Video";
+                      if (k === "audio") return "🎤 Voice";
+                      return "📎 Media";
+                    })()
+                  : (replyingTo.content.text ?? "").slice(0, 60)}
+              </p>
+            </div>
+            <button
+              type="button"
+              data-ocid="chat.reply.close_button"
+              onClick={() => setReplyingTo(null)}
+              className="p-1.5 rounded-full hover:bg-muted/60 transition-colors shrink-0"
+              aria-label="Cancel reply"
+            >
+              <X className="h-4 w-4 text-muted-foreground" />
+            </button>
           </motion.div>
         )}
       </AnimatePresence>

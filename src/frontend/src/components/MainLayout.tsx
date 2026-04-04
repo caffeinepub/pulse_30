@@ -4,9 +4,11 @@ import { Loader2, MessageCircle, Radio } from "lucide-react";
 import { Suspense, lazy, useEffect, useState } from "react";
 import type { ConversationId } from "../backend";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
+import { useBackgroundNotifications } from "../hooks/usePushNotifications";
 import {
   useCreateDirectConversation,
   useGetCallerUserProfile,
+  useGetMyNotifications,
   useSearchUserByUsername,
   useUpdateLastSeen,
 } from "../hooks/useQueries";
@@ -44,6 +46,12 @@ export default function MainLayout({
   const [profileModalOpen, setProfileModalOpen] = useState(false);
 
   const currentUserId = identity?.getPrincipal().toString() ?? "";
+
+  // Fetch notifications for background push
+  const { data: notifications = [] } = useGetMyNotifications();
+
+  // Show native push notifications when the page is backgrounded
+  useBackgroundNotifications(notifications);
 
   useEffect(() => {
     updateLastSeen();

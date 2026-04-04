@@ -1,31 +1,47 @@
 # Pulse
 
 ## Current State
-Pulse is a WhatsApp-inspired messaging app with a luxury dark UI accented in gold. It has a Motoko backend and React/TypeScript frontend. Core features are built but several critical bugs persist: admin Gold claim fails with unauthorized error, media MIME types are broken for mobile, universal search bar is missing, and transaction history labels are incorrect.
+
+Pulse is a WhatsApp-inspired messaging PWA with DMs, group chats, channels, stories, Gold credit system, and media sharing. The `Message` type in the backend has: `id`, `sender`, `content` (text, mediaUrl, mediaType), `timestamp`, `readReceipts`. There is no `replyToId` field. `MessageInput` only contains `content`. Media uploads go through `StorageClient.putFile` which currently stores files without preserving MIME types reliably. There is no client-side compression before upload.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Universal search bar (left of QR icon in chat list header): search users by username, messages within conversations, posts within channels — inline results grouped by type
-- Auto-elevate `@pulse` username to `#admin` role on first profile save
+- `replyToId: ?MessageId` optional field to `Message` type in backend
+- `replyToId: ?MessageId` optional field to `MessageInput` type in backend  
+- `sendMessage` backend function updated to accept and store `replyToId`
+- Client-side image compression to under 1MB before upload (frontend only, using Canvas API)
+- Client-side video compression to max 720p before upload (frontend only, using MediaRecorder/canvas)
+- WhatsApp-style "Replying to..." bar above the text input in ChatView (DMs and groups)
+- Swipe-right or long-press on a message to trigger reply mode
+- Quoted reply block displayed inline above each message that is a reply (shows original sender name + truncated text or media type)
+- Cancel button on the reply bar to dismiss reply mode
 
 ### Modify
-- Fix admin Gold claim: `@pulse` must be auto-elevated to `#admin` on `saveCallerUserProfile` when username matches `adminUsername`
-- Fix all media uploads: always pass correct MIME type (video/mp4, audio/webm or audio/ogg, image/jpeg etc.) in blob metadata; video elements use `muted` + `playsInline` for iOS compatibility
-- Fix transaction history display: Sent = amber with "-" prefix, Received = green, Fee Reward = gold sparkle; most recent first
-- Fix Gold claim limit: max is 9,999,999 (not 99,999.99); backend uses `goldMaxClaim = 999_999_900` (units * 100 for 2 decimal places)
-- Keep all existing features: DMs, group chats (19 msg pagination, owner badge, add/remove members), stories (72h expiry, image/video, 19/page), channels (19/page, follow, like/comment/forward), Gold wallet (5% fee, dealers 99+ Gold), blocking, profile links/QR, PWA, group avatars, sender avatars in group chats
+- `Message` type: add `replyToId: ?MessageId` field
+- `MessageInput` type: add `replyToId: ?MessageId` field
+- `sendMessage` function: store `replyToId` from input into the new message
+- `useMediaUpload` hook: compress images under 1MB and videos to max 720p before passing to StorageClient
+- `ChatView.tsx`: add reply state, reply bar UI, reply quote rendering on messages
+- MIME type support: completely unchanged
 
 ### Remove
-- Notification bell (already removed per user request)
+- Nothing removed
 
 ## Implementation Plan
-1. **Backend**: Regenerate Motoko with auto-admin elevation for `@pulse`, fixed Gold claim limit (9,999,999), Gold fee distribution, block system, search endpoints
-2. **DID files**: Regenerate `backend.did.js` and `backend.did.d.ts` in sync with new backend
-3. **Frontend**:
-   - Fix media upload hooks to always include correct MIME type in blob storage metadata
-   - Add universal search bar component left of QR icon in Sidebar/ChatList header
-   - Fix WalletTab transaction history display (correct labels, colors, sort order)
-   - Fix video elements: add `muted`, `playsInline`, wait for `canplay` event
-   - Ensure all Gold balance displays use 2 decimal places
-   - Keep all existing components intact
+
+1. **Backend:** Add `replyToId: ?MessageId` to `Message` and `MessageInput` types. Update `sendMessage` to pass through `replyToId` when creating a new message. No other backend changes.
+
+2. **Frontend - Media Compression:**
+   - In `useMediaUpload` (or a new `useMediaCompression` hook), compress images using Canvas API: draw image onto canvas at reduced quality until file size is under 1MB
+   - For videos: use MediaRecorder with constrained resolution (max 720p / 1280x720) if browser supports it; otherwise pass through as-is
+   - Compression is invisible to the user -- no UI changes
+   - MIME types preserved exactly as before
+
+3. **Frontend - Reply Threading in ChatView:**
+   - Add `replyingTo: Message | null` state
+   - On long-press or swipe-right of a message bubble, set `replyingTo` to that message
+   - Show a dismissable "Replying to [sender display name]" bar above the input with a preview of the original message (truncated text, or "📷 Photo" / "🎥 Video" / "🎤 Voice" for media)
+   - When sending, include `replyToId: [replyingTo.id]` in the `MessageInput`; clear `replyingTo` after send
+   - In message rendering: if `msg.replyToId` is set, look up the original message from the conversation and render a small quoted block above the message bubble (gold left-border, original sender name, truncated content)
+   - Works in both DMs and group chats
