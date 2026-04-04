@@ -1,47 +1,36 @@
 # Pulse
 
 ## Current State
-
-Pulse is a WhatsApp-inspired messaging PWA with DMs, group chats, channels, stories, Gold credit system, and media sharing. The `Message` type in the backend has: `id`, `sender`, `content` (text, mediaUrl, mediaType), `timestamp`, `readReceipts`. There is no `replyToId` field. `MessageInput` only contains `content`. Media uploads go through `StorageClient.putFile` which currently stores files without preserving MIME types reliably. There is no client-side compression before upload.
+- StorageClient.putFile only accepts two parameters (blobBytes, onProgress); MIME type is never passed or stored, every file is hardcoded to `application/octet-stream`
+- useMediaUpload.ts calls putFile with only two args (drops the file's real MIME type)
+- MediaMessage video element uses `<source src={url} />` with no `type` attribute, so the browser can't detect the codec
+- Reply prefix (buildReplyPrefix) uses `replyingTo.sender.toString().slice(0, 8)` -- a truncated principal ID -- both in the quoted block and in the "Replying to..." panel
+- No heart/like reaction system exists on chat messages (only channel posts have likes)
 
 ## Requested Changes (Diff)
 
 ### Add
-- `replyToId: ?MessageId` optional field to `Message` type in backend
-- `replyToId: ?MessageId` optional field to `MessageInput` type in backend  
-- `sendMessage` backend function updated to accept and store `replyToId`
-- Client-side image compression to under 1MB before upload (frontend only, using Canvas API)
-- Client-side video compression to max 720p before upload (frontend only, using MediaRecorder/canvas)
-- WhatsApp-style "Replying to..." bar above the text input in ChatView (DMs and groups)
-- Swipe-right or long-press on a message to trigger reply mode
-- Quoted reply block displayed inline above each message that is a reply (shows original sender name + truncated text or media type)
-- Cancel button on the reply bar to dismiss reply mode
+- Heart reaction button on each message bubble in DMs and group chats: tap to toggle a ❤️ reaction, tap again to remove it. Show the heart icon and a count below the message bubble. Any user can react to any message.
+- Per-message reaction state persisted in localStorage (key: `pulse_reactions_{conversationId}`) so reactions survive page reload for the current user
+- A `reactToMessage` frontend-only toggle function (no backend change needed)
 
 ### Modify
-- `Message` type: add `replyToId: ?MessageId` field
-- `MessageInput` type: add `replyToId: ?MessageId` field
-- `sendMessage` function: store `replyToId` from input into the new message
-- `useMediaUpload` hook: compress images under 1MB and videos to max 720p before passing to StorageClient
-- `ChatView.tsx`: add reply state, reply bar UI, reply quote rendering on messages
-- MIME type support: completely unchanged
+- StorageClient.putFile: add optional third parameter `mimeType: string = "application/octet-stream"` and use it for the Blob type and the `Content-Type` file header instead of hardcoding
+- useMediaUpload.ts: pass `file.type` as the third argument to `storageClient.putFile(rawBytes, progressCallback, file.type)`
+- ChatView MediaMessage video element: change `<source src={url} />` to include a dynamic `type` attribute derived from the stored mediaUrl or file MIME type. Use a helper that maps `__kind__` to a sensible default type string (`video/mp4` is fine as fallback but ideally pass the real mime from URL or storage metadata)
+- buildReplyPrefix: instead of using `sender.toString().slice(0, 8)`, resolve the sender's display name / username via the already-available `senderProfile` data (use `senderProfile?.username ?? senderProfile?.displayName`). For the current user's own messages use "You". The reply prefix format remains `[REPLY:msgId:senderName:preview]`
+- The "Replying to..." panel above the text input (line ~1800): show the sender's username/displayName instead of the principal slice
+- MessageBubble QuotedBlock: the `senderName` shown in the quoted reply block should be the username not a principal slice
 
 ### Remove
-- Nothing removed
+- Hardcoded `application/octet-stream` in StorageClient putFile
+- Truncated principal ID usage in reply sender names
 
 ## Implementation Plan
-
-1. **Backend:** Add `replyToId: ?MessageId` to `Message` and `MessageInput` types. Update `sendMessage` to pass through `replyToId` when creating a new message. No other backend changes.
-
-2. **Frontend - Media Compression:**
-   - In `useMediaUpload` (or a new `useMediaCompression` hook), compress images using Canvas API: draw image onto canvas at reduced quality until file size is under 1MB
-   - For videos: use MediaRecorder with constrained resolution (max 720p / 1280x720) if browser supports it; otherwise pass through as-is
-   - Compression is invisible to the user -- no UI changes
-   - MIME types preserved exactly as before
-
-3. **Frontend - Reply Threading in ChatView:**
-   - Add `replyingTo: Message | null` state
-   - On long-press or swipe-right of a message bubble, set `replyingTo` to that message
-   - Show a dismissable "Replying to [sender display name]" bar above the input with a preview of the original message (truncated text, or "📷 Photo" / "🎥 Video" / "🎤 Voice" for media)
-   - When sending, include `replyToId: [replyingTo.id]` in the `MessageInput`; clear `replyingTo` after send
-   - In message rendering: if `msg.replyToId` is set, look up the original message from the conversation and render a small quoted block above the message bubble (gold left-border, original sender name, truncated content)
-   - Works in both DMs and group chats
+1. Update StorageClient.ts: add mimeType param to putFile, pass it to Blob constructor and fileHeaders Content-Type
+2. Update useMediaUpload.ts: pass file.type to putFile
+3. Update ChatView.tsx MediaMessage video: add type attribute to <source>
+4. Update ChatView.tsx buildReplyPrefix: accept senderProfile (or username string) instead of the truncated principal
+5. Update ChatView.tsx reply panel (replyingTo block ~line 1800): resolve sender username from profiles map or useGetUserProfile, show it instead of principal slice
+6. Update ChatView.tsx MessageBubble reply logic (~line 1104): resolve sender name from senderProfile before building prefix
+7. Add heart reaction UI to MessageBubble: small heart icon button below the bubble, localStorage-backed toggle per message per conversation, show count if > 0

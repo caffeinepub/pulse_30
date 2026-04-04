@@ -34,8 +34,10 @@ export function useMediaUpload() {
 
       const rawBytes = new Uint8Array(await file.arrayBuffer());
 
-      const { hash } = await storageClient.putFile(rawBytes, (pct) =>
-        setUploadProgress(pct),
+      const { hash } = await storageClient.putFile(
+        rawBytes,
+        (pct) => setUploadProgress(pct),
+        file.type,
       );
       const url = await storageClient.getDirectURL(hash);
 

@@ -87,6 +87,29 @@ import {
 import { compressImage, compressVideo } from "../utils/mediaCompression";
 import UserProfileModal from "./UserProfileModal";
 
+// ─── Reaction helpers (localStorage) ─────────────────────────────────────
+function getReactions(conversationId: bigint): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(`pulse_reactions_${conversationId}`);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveReactions(
+  conversationId: bigint,
+  reactions: Record<string, boolean>,
+) {
+  try {
+    localStorage.setItem(
+      `pulse_reactions_${conversationId}`,
+      JSON.stringify(reactions),
+    );
+  } catch {}
+}
+// ──────────────────────────────────────────────────────────────────────────
+
 function getInitials(name: string) {
   return name
     .split(" ")
@@ -242,9 +265,15 @@ interface MediaMessageProps {
   url: string;
   mediaType: MediaType;
   onImageClick: (url: string) => void;
+  mimeTypeStr?: string;
 }
 
-function MediaMessage({ url, mediaType, onImageClick }: MediaMessageProps) {
+function MediaMessage({
+  url,
+  mediaType,
+  onImageClick,
+  mimeTypeStr,
+}: MediaMessageProps) {
   if (mediaType.__kind__ === "image") {
     return (
       <button
@@ -273,7 +302,7 @@ function MediaMessage({ url, mediaType, onImageClick }: MediaMessageProps) {
         className="max-w-[240px] max-h-[240px] rounded-lg mt-1"
         style={{ display: "block" }}
       >
-        <source src={url} />
+        <source src={url} type={mimeTypeStr || "video/mp4"} />
       </video>
     );
   }
@@ -454,9 +483,11 @@ interface MessageBubbleProps {
     mediaUrl?: string;
     mediaType?: string;
   }) => void;
-  onReply?: (message: Message) => void;
+  onReply?: (message: Message, senderDisplayName: string) => void;
   index: number;
   conversationId: ConversationId;
+  reactions: Record<string, boolean>;
+  onToggleReaction: (messageId: bigint) => void;
 }
 
 function MessageBubble({
@@ -471,6 +502,8 @@ function MessageBubble({
   onReply,
   index,
   conversationId,
+  reactions,
+  onToggleReaction,
 }: MessageBubbleProps) {
   const isSent = message.sender.toString() === currentUserId;
   const senderId = message.sender.toString();
@@ -508,7 +541,12 @@ function MessageBubble({
     touchStartXRef.current = e.touches[0].clientX;
     touchStartYRef.current = e.touches[0].clientY;
     longPressTimerRef.current = setTimeout(() => {
-      onReply?.(message);
+      onReply?.(
+        message,
+        senderProfile?.displayName ??
+          senderProfile?.username ??
+          senderId.slice(0, 8),
+      );
     }, 500);
   };
 
@@ -528,7 +566,12 @@ function MessageBubble({
         clearTimeout(longPressTimerRef.current);
         longPressTimerRef.current = null;
       }
-      onReply?.(message);
+      onReply?.(
+        message,
+        senderProfile?.displayName ??
+          senderProfile?.username ??
+          senderId.slice(0, 8),
+      );
       // reset to avoid repeated fires
       touchStartXRef.current = 9999;
     } else if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
@@ -553,7 +596,7 @@ function MessageBubble({
       transition={{ duration: 0.2 }}
       className={`flex items-end gap-2 ${
         isSent ? "flex-row-reverse" : "flex-row"
-      } mb-1`}
+      } mb-1 group`}
     >
       {!isSent && isGroup && (
         <Avatar
@@ -635,6 +678,20 @@ function MessageBubble({
             />
           </div>
         </div>
+        {/* Heart reaction button */}
+        <button
+          type="button"
+          data-ocid={`chat.message.toggle.${index + 1}`}
+          onClick={() => onToggleReaction(message.id)}
+          className={`mt-0.5 text-xs flex items-center gap-0.5 px-1.5 py-0.5 rounded-full transition-all ${
+            reactions[message.id.toString()]
+              ? "bg-rose-500/20 text-rose-400"
+              : "text-zinc-500 hover:text-rose-400 opacity-0 group-hover:opacity-100"
+          }`}
+          aria-label="React with heart"
+        >
+          ❤ {reactions[message.id.toString()] ? "1" : ""}
+        </button>
         {/* Reply + Forward buttons on hover */}
         {hovered && (
           <div
@@ -644,7 +701,14 @@ function MessageBubble({
               <button
                 type="button"
                 data-ocid="chat.message.secondary_button"
-                onClick={() => onReply(message)}
+                onClick={() =>
+                  onReply(
+                    message,
+                    senderProfile?.displayName ??
+                      senderProfile?.username ??
+                      senderId.slice(0, 8),
+                  )
+                }
                 className="p-1.5 rounded-lg hover:bg-muted/60 transition-colors text-muted-foreground hover:text-foreground shrink-0"
                 aria-label="Reply to message"
               >
@@ -922,6 +986,18 @@ export default function ChatView({
   const [visibleMsgCount, setVisibleMsgCount] = useState(19);
   const [visibleMembersCount, setVisibleMembersCount] = useState(19);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [replyingSenderName, setReplyingSenderName] = useState<string>("");
+  const [reactions, setReactions] = useState<Record<string, boolean>>(() =>
+    getReactions(conversationId),
+  );
+
+  function handleToggleReaction(messageId: bigint) {
+    const key = messageId.toString();
+    const updated = { ...reactions, [key]: !reactions[key] };
+    if (!updated[key]) delete updated[key];
+    setReactions(updated);
+    saveReactions(conversationId, updated);
+  }
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -1018,6 +1094,7 @@ export default function ChatView({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "instant" });
     setVisibleMsgCount(19);
+    setReactions(getReactions(conversationId));
   }, [conversationId]);
 
   // Clean up timer on unmount
@@ -1103,7 +1180,7 @@ export default function ChatView({
       const replySenderName =
         replyingTo.sender.toString() === currentUserId
           ? "You"
-          : replyingTo.sender.toString().slice(0, 8);
+          : replyingSenderName || replyingTo.sender.toString().slice(0, 8);
       const prefix = buildReplyPrefix(replyingTo, replySenderName);
       messageText = prefix + messageText;
     }
@@ -1121,6 +1198,7 @@ export default function ChatView({
       });
       setText("");
       setReplyingTo(null);
+      setReplyingSenderName("");
     } catch {
       toast.error("Failed to send message");
     }
@@ -1697,9 +1775,14 @@ export default function ChatView({
                       setForwardMsgContent(msgContent);
                       setForwardMsgOpen(true);
                     }}
-                    onReply={(msg) => setReplyingTo(msg)}
+                    onReply={(msg, displayName) => {
+                      setReplyingTo(msg);
+                      setReplyingSenderName(displayName);
+                    }}
                     index={idx}
                     conversationId={conversationId}
+                    reactions={reactions}
+                    onToggleReaction={handleToggleReaction}
                   />
                 );
               })}
@@ -1799,7 +1882,8 @@ export default function ChatView({
                 Replying to{" "}
                 {replyingTo.sender.toString() === currentUserId
                   ? "yourself"
-                  : replyingTo.sender.toString().slice(0, 8)}
+                  : replyingSenderName ||
+                    replyingTo.sender.toString().slice(0, 8)}
               </p>
               <p
                 className="text-[11px] truncate"
@@ -1819,7 +1903,10 @@ export default function ChatView({
             <button
               type="button"
               data-ocid="chat.reply.close_button"
-              onClick={() => setReplyingTo(null)}
+              onClick={() => {
+                setReplyingTo(null);
+                setReplyingSenderName("");
+              }}
               className="p-1.5 rounded-full hover:bg-muted/60 transition-colors shrink-0"
               aria-label="Cancel reply"
             >
