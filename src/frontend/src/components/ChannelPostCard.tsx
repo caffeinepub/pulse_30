@@ -84,28 +84,32 @@ function extractTikTokId(url: string): string | null {
 }
 
 function TikTokEmbed({ url }: { url: string }) {
+  const videoId = extractTikTokId(url);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const injectedRef = useRef(false);
-  const videoId = extractTikTokId(url);
 
   useEffect(() => {
     if (videoId) return; // handled by iframe below
-    if (injectedRef.current || !containerRef.current) return;
+    if (injectedRef.current) return;
     injectedRef.current = true;
-
-    // For short URLs we can't extract the ID, use blockquote + embed.js
-    containerRef.current.innerHTML = `<blockquote class="tiktok-embed" cite="${url}" data-video-id="" style="max-width:100%;min-width:0;border:none;padding:0;margin:0;"></blockquote>`;
-    if (!(window as any).tiktokEmbedLoaded) {
-      (window as any).tiktokEmbedLoaded = true;
-      const s = document.createElement("script");
-      s.src = "https://www.tiktok.com/embed.js";
-      s.async = true;
-      document.body.appendChild(s);
-    } else if ((window as any).tiktokEmbed?.lib) {
-      (window as any).tiktokEmbed.lib.render(containerRef.current);
-    }
+    setLoading(true);
+    setFailed(false);
+    fetch(`https://noembed.com/embed?url=${encodeURIComponent(url)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.html && containerRef.current) {
+          containerRef.current.innerHTML = data.html;
+        } else {
+          setFailed(true);
+        }
+      })
+      .catch(() => setFailed(true))
+      .finally(() => setLoading(false));
   }, [url, videoId]);
 
+  // For full URLs with video ID -- direct iframe
   if (videoId) {
     return (
       <div
@@ -125,6 +129,49 @@ function TikTokEmbed({ url }: { url: string }) {
     );
   }
 
+  if (loading) {
+    return (
+      <div
+        className="w-full rounded-xl flex items-center justify-center py-8"
+        style={{ background: "oklch(0.18 0.02 240)" }}
+      >
+        <Loader2
+          className="h-6 w-6 animate-spin"
+          style={{ color: "oklch(0.82 0.15 72)" }}
+        />
+      </div>
+    );
+  }
+
+  if (failed) {
+    return (
+      <div
+        className="w-full rounded-xl p-4 flex items-center gap-3"
+        style={{
+          background: "oklch(0.18 0.02 240)",
+          border: "1px solid oklch(0.28 0.02 240)",
+        }}
+      >
+        <div
+          className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+          style={{ background: "oklch(0.12 0.01 240)" }}
+        >
+          <span className="text-white font-bold text-sm">TT</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-foreground">TikTok Video</p>
+          <p className="text-xs text-muted-foreground truncate">{url}</p>
+        </div>
+        <a href={url} target="_blank" rel="noopener noreferrer">
+          <Button size="sm" variant="outline" className="shrink-0 text-xs">
+            Watch
+          </Button>
+        </a>
+      </div>
+    );
+  }
+
+  // oEmbed HTML injected via ref -- React never touches this div's innerHTML
   return (
     <div ref={containerRef} className="w-full rounded-xl overflow-hidden" />
   );

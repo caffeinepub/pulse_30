@@ -384,6 +384,7 @@ function MessageBubble({
     isGroup && !isSent ? senderId : null,
   );
   const [hovered, setHovered] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(message.content.text ?? "");
   const editMessage = useEditMessage(conversationId);
@@ -404,7 +405,9 @@ function MessageBubble({
     <motion.div
       data-ocid={`chat.message.${index + 1}`}
       onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseLeave={() => {
+        if (!menuOpen) setHovered(false);
+      }}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
@@ -485,7 +488,7 @@ function MessageBubble({
           </div>
         </div>
         {/* Forward button on hover */}
-        {hovered && onForward && (
+        {(hovered || menuOpen) && onForward && (
           <button
             type="button"
             data-ocid="chat.message.forward_button"
@@ -506,8 +509,14 @@ function MessageBubble({
           </button>
         )}
         {/* Edit/Delete menu for own messages */}
-        {isSent && hovered && (
-          <DropdownMenu>
+        {isSent && (hovered || menuOpen) && (
+          <DropdownMenu
+            open={menuOpen}
+            onOpenChange={(open) => {
+              setMenuOpen(open);
+              if (!open) setHovered(false);
+            }}
+          >
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
