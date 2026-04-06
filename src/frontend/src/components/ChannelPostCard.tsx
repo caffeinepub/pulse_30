@@ -77,59 +77,69 @@ function extractYouTubeId(url: string): string | null {
   return m ? m[1] : null;
 }
 
-function extractTikTokId(url: string): string | null {
-  // Match /video/DIGITS in the URL path (handles full URLs)
-  const m = url.match(/\/video\/(\d+)/);
-  return m ? m[1] : null;
-}
-
+/**
+ * TikTokEmbed
+ *
+ * Strategy:
+ * 1. Call TikTok's oEmbed endpoint (CORS-safe: they send ACAO: *) to get the
+ *    embed HTML (a <blockquote> + <script> pair).
+ * 2. Inject the HTML into a ref-managed div so React never overwrites it.
+ * 3. Load (or re-run) TikTok's embed.js to upgrade the blockquote into an
+ *    interactive inline player.
+ *
+ * This works for ALL TikTok link shapes:
+ *  - https://vt.tiktok.com/ZSHSAufpQ/        (short redirect link)
+ *  - https://www.tiktok.com/@user/video/ID    (full URL)
+ *  - https://vm.tiktok.com/XXXXX/             (another short form)
+ */
 function TikTokEmbed({ url }: { url: string }) {
-  const videoId = extractTikTokId(url);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const injectedRef = useRef(false);
 
   useEffect(() => {
-    if (videoId) return; // handled by iframe below
     if (injectedRef.current) return;
     injectedRef.current = true;
-    setLoading(true);
-    setFailed(false);
-    fetch(`https://noembed.com/embed?url=${encodeURIComponent(url)}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.html && containerRef.current) {
-          containerRef.current.innerHTML = data.html;
-        } else {
-          setFailed(true);
-        }
+
+    const oEmbedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`;
+
+    fetch(oEmbedUrl)
+      .then((r) => {
+        if (!r.ok) throw new Error(`oEmbed status ${r.status}`);
+        return r.json();
       })
-      .catch(() => setFailed(true))
-      .finally(() => setLoading(false));
-  }, [url, videoId]);
+      .then((data: { html?: string }) => {
+        if (!data.html || !containerRef.current) {
+          setFailed(true);
+          return;
+        }
 
-  // For full URLs with video ID -- direct iframe
-  if (videoId) {
-    return (
-      <div
-        className="w-full overflow-hidden rounded-xl"
-        style={{ maxHeight: 560 }}
-      >
-        <iframe
-          src={`https://www.tiktok.com/embed/v2/${videoId}`}
-          className="w-full"
-          style={{ height: 560, border: "none" }}
-          allow="autoplay; encrypted-media"
-          allowFullScreen
-          title="TikTok video"
-          scrolling="no"
-        />
-      </div>
-    );
-  }
+        // Inject the oEmbed HTML (blockquote + inline script tag)
+        containerRef.current.innerHTML = data.html;
 
-  if (loading) {
+        // TikTok's own embed script upgrades the blockquote into a player.
+        // Re-use an already-loaded instance, or load a fresh copy.
+        const win = window as any;
+        if (win.tiktokEmbed?.lib) {
+          // SDK already loaded -- re-scan the container
+          win.tiktokEmbed.lib.render(containerRef.current);
+        } else {
+          const script = document.createElement("script");
+          script.src = "https://www.tiktok.com/embed.js";
+          script.async = true;
+          document.head.appendChild(script);
+        }
+
+        setLoading(false);
+      })
+      .catch(() => {
+        setFailed(true);
+        setLoading(false);
+      });
+  }, [url]);
+
+  if (loading && !failed) {
     return (
       <div
         className="w-full rounded-xl flex items-center justify-center py-8"
@@ -171,9 +181,13 @@ function TikTokEmbed({ url }: { url: string }) {
     );
   }
 
-  // oEmbed HTML injected via ref -- React never touches this div's innerHTML
+  // React never renders children here -- innerHTML is managed via ref
   return (
-    <div ref={containerRef} className="w-full rounded-xl overflow-hidden" />
+    <div
+      ref={containerRef}
+      className="w-full rounded-xl overflow-hidden tiktok-embed-container"
+      style={{ minHeight: 200 }}
+    />
   );
 }
 
