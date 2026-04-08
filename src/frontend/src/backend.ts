@@ -345,11 +345,13 @@ export interface backendInterface {
     getCallerUserRole(): Promise<UserRole>;
     getChannel(channelId: ChannelId): Promise<ChannelWithMeta | null>;
     getChannelPostInteractions(postId: ChannelPostId): Promise<ChannelPostInteractions>;
+    getChannelPostViewCount(postId: ChannelPostId): Promise<bigint>;
     getChannelPosts(channelId: ChannelId): Promise<Array<ChannelPost>>;
     getContactStatuses(): Promise<Array<[UserProfile, Array<Status>]>>;
     getConversation(conversationId: ConversationId): Promise<Conversation | null>;
     getGroupAvatars(): Promise<Array<[ConversationId, string]>>;
     getGroupCreators(): Promise<Array<[ConversationId, UserId]>>;
+    getHighlightedStatuses(userId: UserId): Promise<Array<Status>>;
     getMessageReadReceipts(conversationId: ConversationId, messageId: MessageId): Promise<Array<MessageReadReceipt> | null>;
     getMessages(conversationId: ConversationId, offset: bigint, limit: bigint): Promise<Array<Message>>;
     getMyBlockedUsers(): Promise<Array<UserProfile>>;
@@ -357,6 +359,7 @@ export interface backendInterface {
     getMyConversations(): Promise<Array<Conversation>>;
     getMyGoldBalance(): Promise<bigint>;
     getMyGoldTransactions(): Promise<Array<GoldTransaction>>;
+    getMyHighlights(): Promise<Array<StatusId>>;
     getMyNotifications(): Promise<Array<AppNotification>>;
     getMyStatuses(): Promise<Array<Status>>;
     getMyTransactionHistory(): Promise<Array<GoldTransaction>>;
@@ -365,6 +368,7 @@ export interface backendInterface {
     getStatusViewCount(statusId: StatusId): Promise<bigint>;
     getUnreadCount(conversationId: ConversationId): Promise<bigint>;
     getUserByPrincipal(userId: UserId): Promise<UserProfile | null>;
+    getUserHighlights(userId: UserId): Promise<Array<StatusId>>;
     getUserProfile(userId: UserId): Promise<UserProfile | null>;
     getUsersWithGoldAbove(threshold: bigint): Promise<Array<DealerInfo>>;
     isBlockedBy(targetUserId: UserId): Promise<boolean>;
@@ -377,11 +381,26 @@ export interface backendInterface {
     markAsRead(conversationId: ConversationId): Promise<void>;
     markMessagesAsRead(conversationId: ConversationId): Promise<void>;
     markNotificationsRead(): Promise<void>;
+    recordChannelPostView(postId: ChannelPostId): Promise<void>;
     recordStatusView(statusId: StatusId): Promise<void>;
     removeGroupMember(conversationId: ConversationId, memberId: UserId): Promise<void>;
+    removeHighlight(statusId: StatusId): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     requestBuyGold(amount: bigint): Promise<void>;
     requestSellGold(amount: bigint): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
+    saveHighlight(statusId: StatusId): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     searchUserByUsername(username: string): Promise<{
         userId: UserId;
         profile: UserProfile;
@@ -910,6 +929,20 @@ export class Backend implements backendInterface {
             return from_candid_ChannelPostInteractions_n39(this._uploadFile, this._downloadFile, result);
         }
     }
+    async getChannelPostViewCount(arg0: ChannelPostId): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getChannelPostViewCount(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getChannelPostViewCount(arg0);
+            return result;
+        }
+    }
     async getChannelPosts(arg0: ChannelId): Promise<Array<ChannelPost>> {
         if (this.processError) {
             try {
@@ -978,6 +1011,20 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.getGroupCreators();
             return result;
+        }
+    }
+    async getHighlightedStatuses(arg0: UserId): Promise<Array<Status>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getHighlightedStatuses(arg0);
+                return from_candid_vec_n27(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getHighlightedStatuses(arg0);
+            return from_candid_vec_n27(this._uploadFile, this._downloadFile, result);
         }
     }
     async getMessageReadReceipts(arg0: ConversationId, arg1: MessageId): Promise<Array<MessageReadReceipt> | null> {
@@ -1076,6 +1123,20 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.getMyGoldTransactions();
             return from_candid_vec_n60(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getMyHighlights(): Promise<Array<StatusId>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getMyHighlights();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getMyHighlights();
+            return result;
         }
     }
     async getMyNotifications(): Promise<Array<AppNotification>> {
@@ -1188,6 +1249,20 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.getUserByPrincipal(arg0);
             return from_candid_opt_n35(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getUserHighlights(arg0: UserId): Promise<Array<StatusId>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getUserHighlights(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getUserHighlights(arg0);
+            return result;
         }
     }
     async getUserProfile(arg0: UserId): Promise<UserProfile | null> {
@@ -1358,6 +1433,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async recordChannelPostView(arg0: ChannelPostId): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.recordChannelPostView(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.recordChannelPostView(arg0);
+            return result;
+        }
+    }
     async recordStatusView(arg0: StatusId): Promise<void> {
         if (this.processError) {
             try {
@@ -1384,6 +1473,26 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.removeGroupMember(arg0, arg1);
             return result;
+        }
+    }
+    async removeHighlight(arg0: StatusId): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.removeHighlight(arg0);
+                return from_candid_variant_n15(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.removeHighlight(arg0);
+            return from_candid_variant_n15(this._uploadFile, this._downloadFile, result);
         }
     }
     async requestBuyGold(arg0: bigint): Promise<void> {
@@ -1426,6 +1535,26 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.saveCallerUserProfile(to_candid_UserProfile_n78(this._uploadFile, this._downloadFile, arg0));
             return result;
+        }
+    }
+    async saveHighlight(arg0: StatusId): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.saveHighlight(arg0);
+                return from_candid_variant_n15(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.saveHighlight(arg0);
+            return from_candid_variant_n15(this._uploadFile, this._downloadFile, result);
         }
     }
     async searchUserByUsername(arg0: string): Promise<{

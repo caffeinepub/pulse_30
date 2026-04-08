@@ -253,11 +253,13 @@ export interface _SERVICE {
     [ChannelPostId],
     ChannelPostInteractions
   >,
+  'getChannelPostViewCount' : ActorMethod<[ChannelPostId], bigint>,
   'getChannelPosts' : ActorMethod<[ChannelId], Array<ChannelPost>>,
   'getContactStatuses' : ActorMethod<[], Array<[UserProfile, Array<Status>]>>,
   'getConversation' : ActorMethod<[ConversationId], [] | [Conversation]>,
   'getGroupAvatars' : ActorMethod<[], Array<[ConversationId, string]>>,
   'getGroupCreators' : ActorMethod<[], Array<[ConversationId, UserId]>>,
+  'getHighlightedStatuses' : ActorMethod<[UserId], Array<Status>>,
   'getMessageReadReceipts' : ActorMethod<
     [ConversationId, MessageId],
     [] | [Array<MessageReadReceipt>]
@@ -268,6 +270,7 @@ export interface _SERVICE {
   'getMyConversations' : ActorMethod<[], Array<Conversation>>,
   'getMyGoldBalance' : ActorMethod<[], bigint>,
   'getMyGoldTransactions' : ActorMethod<[], Array<GoldTransaction>>,
+  'getMyHighlights' : ActorMethod<[], Array<StatusId>>,
   'getMyNotifications' : ActorMethod<[], Array<AppNotification>>,
   'getMyStatuses' : ActorMethod<[], Array<Status>>,
   'getMyTransactionHistory' : ActorMethod<[], Array<GoldTransaction>>,
@@ -279,6 +282,7 @@ export interface _SERVICE {
   'getStatusViewCount' : ActorMethod<[StatusId], bigint>,
   'getUnreadCount' : ActorMethod<[ConversationId], bigint>,
   'getUserByPrincipal' : ActorMethod<[UserId], [] | [UserProfile]>,
+  'getUserHighlights' : ActorMethod<[UserId], Array<StatusId>>,
   'getUserProfile' : ActorMethod<[UserId], [] | [UserProfile]>,
   'getUsersWithGoldAbove' : ActorMethod<[bigint], Array<DealerInfo>>,
   'isBlockedBy' : ActorMethod<[UserId], boolean>,
@@ -291,11 +295,22 @@ export interface _SERVICE {
   'markAsRead' : ActorMethod<[ConversationId], undefined>,
   'markMessagesAsRead' : ActorMethod<[ConversationId], undefined>,
   'markNotificationsRead' : ActorMethod<[], undefined>,
+  'recordChannelPostView' : ActorMethod<[ChannelPostId], undefined>,
   'recordStatusView' : ActorMethod<[StatusId], undefined>,
   'removeGroupMember' : ActorMethod<[ConversationId, UserId], undefined>,
+  'removeHighlight' : ActorMethod<
+    [StatusId],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
   'requestBuyGold' : ActorMethod<[bigint], undefined>,
   'requestSellGold' : ActorMethod<[bigint], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
+  'saveHighlight' : ActorMethod<
+    [StatusId],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
   'searchUserByUsername' : ActorMethod<
     [string],
     [] | [{ 'userId' : UserId, 'profile' : UserProfile }]

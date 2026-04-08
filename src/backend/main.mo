@@ -264,6 +264,12 @@ actor {
   // Story viewers: statusId -> set of viewer principals (deduped)
   stable let statusViewers = Map.empty<StatusId, Set.Set<UserId>>();
 
+  // Channel post viewers: postId -> set of viewer principals (deduped)
+  stable let channelPostViewers = Map.empty<ChannelPostId, Set.Set<UserId>>();
+
+  // Highlights: userId -> list of saved statusIds (permanent story saves)
+  stable let highlights = Map.empty<UserId, List.List<StatusId>>();
+
   // Block System State
   let blockedUsers = Map.empty<UserId, Set.Set<UserId>>();
 
@@ -1997,5 +2003,114 @@ actor {
     let channelsCreated = channels.size();
     let storiesPosted = statuses.size();
     { totalUsers; totalMessages; totalGoldVolume; activeUsers; channelsCreated; storiesPosted };
+  };
+
+  // ============================================================
+  // Channel Post View Count Endpoints
+  // ============================================================
+
+  public shared ({ caller }) func recordChannelPostView(postId : ChannelPostId) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized");
+    };
+    // Do not record the author viewing their own post
+    switch (channelPosts.get(postId)) {
+      case (null) { return };
+      case (?post) {
+        if (post.author == caller) { return };
+      };
+    };
+    let viewers = switch (channelPostViewers.get(postId)) {
+      case (null) { Set.empty<UserId>() };
+      case (?s) { s };
+    };
+    viewers.add(caller);
+    channelPostViewers.add(postId, viewers);
+  };
+
+  public query ({ caller }) func getChannelPostViewCount(postId : ChannelPostId) : async Nat {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized");
+    };
+    switch (channelPostViewers.get(postId)) {
+      case (null) { 0 };
+      case (?s) { s.size() };
+    };
+  };
+
+  // ============================================================
+  // Highlights Endpoints
+  // ============================================================
+
+  public shared ({ caller }) func saveHighlight(statusId : StatusId) : async { #ok; #err : Text } {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      return #err("Unauthorized");
+    };
+    // Only the story author can save it as a highlight
+    switch (statuses.get(statusId)) {
+      case (null) { return #err("Story not found") };
+      case (?status) {
+        if (status.author != caller) { return #err("You can only highlight your own stories") };
+      };
+    };
+    let lst = switch (highlights.get(caller)) {
+      case (null) { List.empty<StatusId>() };
+      case (?l) { l };
+    };
+    // Max 20 highlights per user
+    if (lst.size() >= 20) { return #err("Maximum 20 highlights allowed") };
+    // Avoid duplicates
+    if (lst.toArray().findIndex(func(id) { id == statusId }) != null) {
+      return #ok;
+    };
+    lst.add(statusId);
+    highlights.add(caller, lst);
+    #ok;
+  };
+
+  public shared ({ caller }) func removeHighlight(statusId : StatusId) : async { #ok; #err : Text } {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      return #err("Unauthorized");
+    };
+    switch (highlights.get(caller)) {
+      case (null) { return #err("Highlight not found") };
+      case (?lst) {
+        let filtered = lst.filter(func(id) { id != statusId });
+        highlights.add(caller, filtered);
+      };
+    };
+    #ok;
+  };
+
+  public query ({ caller }) func getMyHighlights() : async [StatusId] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized");
+    };
+    switch (highlights.get(caller)) {
+      case (null) { [] };
+      case (?lst) { lst.toArray() };
+    };
+  };
+
+  public query ({ caller }) func getUserHighlights(userId : UserId) : async [StatusId] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized");
+    };
+    switch (highlights.get(userId)) {
+      case (null) { [] };
+      case (?lst) { lst.toArray() };
+    };
+  };
+
+  // Returns full Status objects for a user's highlights — bypasses 72-hour expiry
+  public query ({ caller }) func getHighlightedStatuses(userId : UserId) : async [Status] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized");
+    };
+    let highlightIds = switch (highlights.get(userId)) {
+      case (null) { return [] };
+      case (?lst) { lst.toArray() };
+    };
+    highlightIds.filterMap(func(statusId) { statuses.get(statusId) });
   };
 };

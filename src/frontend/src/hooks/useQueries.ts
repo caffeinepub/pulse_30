@@ -1067,7 +1067,7 @@ export function useBookmarkPost() {
   return useMutation({
     mutationFn: async (postId: ChannelPostId) => {
       if (!actor) throw new Error("Actor not available");
-      await (actor as any).bookmarkPost(postId);
+      await extActor(actor).bookmarkPost(postId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["myBookmarkedPosts"] });
@@ -1081,7 +1081,7 @@ export function useUnbookmarkPost() {
   return useMutation({
     mutationFn: async (postId: ChannelPostId) => {
       if (!actor) throw new Error("Actor not available");
-      await (actor as any).unbookmarkPost(postId);
+      await extActor(actor).unbookmarkPost(postId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["myBookmarkedPosts"] });
@@ -1095,7 +1095,7 @@ export function useGetMyBookmarkedPosts() {
     queryKey: ["myBookmarkedPosts"],
     queryFn: async () => {
       if (!actor) return [];
-      return (actor as any).getMyBookmarkedPosts();
+      return extActor(actor).getMyBookmarkedPosts();
     },
     enabled: !!actor && !isFetching,
     refetchInterval: 30000,
@@ -1109,7 +1109,7 @@ export function useRecordStatusView() {
   return useMutation({
     mutationFn: async (statusId: StatusId) => {
       if (!actor) throw new Error("Actor not available");
-      await (actor as any).recordStatusView(statusId);
+      await extActor(actor).recordStatusView(statusId);
     },
   });
 }
@@ -1120,7 +1120,7 @@ export function useGetStatusViewCount(statusId: StatusId | null) {
     queryKey: ["statusViewCount", statusId?.toString()],
     queryFn: async () => {
       if (!actor || statusId === null) return 0;
-      const count = await (actor as any).getStatusViewCount(statusId);
+      const count = await extActor(actor).getStatusViewCount(statusId);
       return Number(count);
     },
     enabled: !!actor && !isFetching && statusId !== null,
@@ -1158,5 +1158,104 @@ export function useGetAnalytics() {
     },
     enabled: !!actor && !isFetching,
     refetchInterval: 60000,
+  });
+}
+
+// ─── Channel Post View Count Hooks ───────────────────────────────────────────
+
+export function useRecordChannelPostView() {
+  const { actor } = useActor();
+  return useMutation({
+    mutationFn: async (postId: ChannelPostId) => {
+      if (!actor) throw new Error("Actor not available");
+      await extActor(actor).recordChannelPostView(postId);
+    },
+  });
+}
+
+export function useGetChannelPostViewCount(postId: ChannelPostId | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<number>({
+    queryKey: ["channelPostViewCount", postId?.toString()],
+    queryFn: async () => {
+      if (!actor || postId === null) return 0;
+      const count = await extActor(actor).getChannelPostViewCount(postId);
+      return Number(count);
+    },
+    enabled: !!actor && !isFetching && postId !== null,
+    refetchInterval: 60000,
+  });
+}
+
+// ─── Highlight Hooks ──────────────────────────────────────────────────────────
+
+export function useSaveHighlight() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (statusId: StatusId) => {
+      if (!actor) throw new Error("Actor not available");
+      await extActor(actor).saveHighlight(statusId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["myHighlights"] });
+      queryClient.invalidateQueries({ queryKey: ["userHighlights"] });
+      queryClient.invalidateQueries({ queryKey: ["highlightedStatuses"] });
+    },
+  });
+}
+
+export function useRemoveHighlight() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (statusId: StatusId) => {
+      if (!actor) throw new Error("Actor not available");
+      await extActor(actor).removeHighlight(statusId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["myHighlights"] });
+      queryClient.invalidateQueries({ queryKey: ["userHighlights"] });
+      queryClient.invalidateQueries({ queryKey: ["highlightedStatuses"] });
+    },
+  });
+}
+
+export function useGetMyHighlights() {
+  const { actor, isFetching } = useActor();
+  return useQuery<StatusId[]>({
+    queryKey: ["myHighlights"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return extActor(actor).getMyHighlights();
+    },
+    enabled: !!actor && !isFetching,
+    refetchInterval: 30000,
+  });
+}
+
+export function useGetUserHighlights(userId: string | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<StatusId[]>({
+    queryKey: ["userHighlights", userId],
+    queryFn: async () => {
+      if (!actor || !userId) return [];
+      return extActor(actor).getUserHighlights(Principal.fromText(userId));
+    },
+    enabled: !!actor && !isFetching && !!userId,
+    refetchInterval: 30000,
+  });
+}
+
+export function useGetHighlightedStatuses(userId: string | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<import("../backend").Status[]>({
+    queryKey: ["highlightedStatuses", userId],
+    queryFn: async () => {
+      if (!actor || !userId) return [];
+      return extActor(actor).getHighlightedStatuses(Principal.fromText(userId));
+    },
+    enabled: !!actor && !isFetching && !!userId,
+    refetchInterval: 30000,
   });
 }

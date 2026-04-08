@@ -245,11 +245,13 @@ export interface backendInterface {
     getCallerUserRole(): Promise<UserRole>;
     getChannel(channelId: ChannelId): Promise<ChannelWithMeta | null>;
     getChannelPostInteractions(postId: ChannelPostId): Promise<ChannelPostInteractions>;
+    getChannelPostViewCount(postId: ChannelPostId): Promise<bigint>;
     getChannelPosts(channelId: ChannelId): Promise<Array<ChannelPost>>;
     getContactStatuses(): Promise<Array<[UserProfile, Array<Status>]>>;
     getConversation(conversationId: ConversationId): Promise<Conversation | null>;
     getGroupAvatars(): Promise<Array<[ConversationId, string]>>;
     getGroupCreators(): Promise<Array<[ConversationId, UserId]>>;
+    getHighlightedStatuses(userId: UserId): Promise<Array<Status>>;
     getMessageReadReceipts(conversationId: ConversationId, messageId: MessageId): Promise<Array<MessageReadReceipt> | null>;
     getMessages(conversationId: ConversationId, offset: bigint, limit: bigint): Promise<Array<Message>>;
     getMyBlockedUsers(): Promise<Array<UserProfile>>;
@@ -257,6 +259,7 @@ export interface backendInterface {
     getMyConversations(): Promise<Array<Conversation>>;
     getMyGoldBalance(): Promise<bigint>;
     getMyGoldTransactions(): Promise<Array<GoldTransaction>>;
+    getMyHighlights(): Promise<Array<StatusId>>;
     getMyNotifications(): Promise<Array<AppNotification>>;
     getMyStatuses(): Promise<Array<Status>>;
     getMyTransactionHistory(): Promise<Array<GoldTransaction>>;
@@ -265,6 +268,7 @@ export interface backendInterface {
     getStatusViewCount(statusId: StatusId): Promise<bigint>;
     getUnreadCount(conversationId: ConversationId): Promise<bigint>;
     getUserByPrincipal(userId: UserId): Promise<UserProfile | null>;
+    getUserHighlights(userId: UserId): Promise<Array<StatusId>>;
     getUserProfile(userId: UserId): Promise<UserProfile | null>;
     getUsersWithGoldAbove(threshold: bigint): Promise<Array<DealerInfo>>;
     isBlockedBy(targetUserId: UserId): Promise<boolean>;
@@ -277,11 +281,26 @@ export interface backendInterface {
     markAsRead(conversationId: ConversationId): Promise<void>;
     markMessagesAsRead(conversationId: ConversationId): Promise<void>;
     markNotificationsRead(): Promise<void>;
+    recordChannelPostView(postId: ChannelPostId): Promise<void>;
     recordStatusView(statusId: StatusId): Promise<void>;
     removeGroupMember(conversationId: ConversationId, memberId: UserId): Promise<void>;
+    removeHighlight(statusId: StatusId): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     requestBuyGold(amount: bigint): Promise<void>;
     requestSellGold(amount: bigint): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
+    saveHighlight(statusId: StatusId): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     searchUserByUsername(username: string): Promise<{
         userId: UserId;
         profile: UserProfile;

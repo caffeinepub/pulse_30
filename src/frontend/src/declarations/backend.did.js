@@ -280,6 +280,7 @@ export const idlService = IDL.Service({
       [ChannelPostInteractions],
       ['query'],
     ),
+  'getChannelPostViewCount' : IDL.Func([ChannelPostId], [IDL.Nat], ['query']),
   'getChannelPosts' : IDL.Func([ChannelId], [IDL.Vec(ChannelPost)], ['query']),
   'getContactStatuses' : IDL.Func(
       [],
@@ -301,6 +302,7 @@ export const idlService = IDL.Service({
       [IDL.Vec(IDL.Tuple(ConversationId, UserId))],
       ['query'],
     ),
+  'getHighlightedStatuses' : IDL.Func([UserId], [IDL.Vec(Status)], ['query']),
   'getMessageReadReceipts' : IDL.Func(
       [ConversationId, MessageId],
       [IDL.Opt(IDL.Vec(MessageReadReceipt))],
@@ -316,6 +318,7 @@ export const idlService = IDL.Service({
   'getMyConversations' : IDL.Func([], [IDL.Vec(Conversation)], ['query']),
   'getMyGoldBalance' : IDL.Func([], [IDL.Nat], ['query']),
   'getMyGoldTransactions' : IDL.Func([], [IDL.Vec(GoldTransaction)], ['query']),
+  'getMyHighlights' : IDL.Func([], [IDL.Vec(StatusId)], ['query']),
   'getMyNotifications' : IDL.Func([], [IDL.Vec(AppNotification)], ['query']),
   'getMyStatuses' : IDL.Func([], [IDL.Vec(Status)], ['query']),
   'getMyTransactionHistory' : IDL.Func(
@@ -336,6 +339,7 @@ export const idlService = IDL.Service({
   'getStatusViewCount' : IDL.Func([StatusId], [IDL.Nat], ['query']),
   'getUnreadCount' : IDL.Func([ConversationId], [IDL.Nat], ['query']),
   'getUserByPrincipal' : IDL.Func([UserId], [IDL.Opt(UserProfile)], ['query']),
+  'getUserHighlights' : IDL.Func([UserId], [IDL.Vec(StatusId)], ['query']),
   'getUserProfile' : IDL.Func([UserId], [IDL.Opt(UserProfile)], ['query']),
   'getUsersWithGoldAbove' : IDL.Func(
       [IDL.Nat],
@@ -352,11 +356,22 @@ export const idlService = IDL.Service({
   'markAsRead' : IDL.Func([ConversationId], [], []),
   'markMessagesAsRead' : IDL.Func([ConversationId], [], []),
   'markNotificationsRead' : IDL.Func([], [], []),
+  'recordChannelPostView' : IDL.Func([ChannelPostId], [], []),
   'recordStatusView' : IDL.Func([StatusId], [], []),
   'removeGroupMember' : IDL.Func([ConversationId, UserId], [], []),
+  'removeHighlight' : IDL.Func(
+      [StatusId],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
   'requestBuyGold' : IDL.Func([IDL.Nat], [], []),
   'requestSellGold' : IDL.Func([IDL.Nat], [], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+  'saveHighlight' : IDL.Func(
+      [StatusId],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
   'searchUserByUsername' : IDL.Func(
       [IDL.Text],
       [IDL.Opt(IDL.Record({ 'userId' : UserId, 'profile' : UserProfile }))],
@@ -672,6 +687,7 @@ export const idlFactory = ({ IDL }) => {
         [ChannelPostInteractions],
         ['query'],
       ),
+    'getChannelPostViewCount' : IDL.Func([ChannelPostId], [IDL.Nat], ['query']),
     'getChannelPosts' : IDL.Func(
         [ChannelId],
         [IDL.Vec(ChannelPost)],
@@ -697,6 +713,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(IDL.Tuple(ConversationId, UserId))],
         ['query'],
       ),
+    'getHighlightedStatuses' : IDL.Func([UserId], [IDL.Vec(Status)], ['query']),
     'getMessageReadReceipts' : IDL.Func(
         [ConversationId, MessageId],
         [IDL.Opt(IDL.Vec(MessageReadReceipt))],
@@ -716,6 +733,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(GoldTransaction)],
         ['query'],
       ),
+    'getMyHighlights' : IDL.Func([], [IDL.Vec(StatusId)], ['query']),
     'getMyNotifications' : IDL.Func([], [IDL.Vec(AppNotification)], ['query']),
     'getMyStatuses' : IDL.Func([], [IDL.Vec(Status)], ['query']),
     'getMyTransactionHistory' : IDL.Func(
@@ -740,6 +758,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Opt(UserProfile)],
         ['query'],
       ),
+    'getUserHighlights' : IDL.Func([UserId], [IDL.Vec(StatusId)], ['query']),
     'getUserProfile' : IDL.Func([UserId], [IDL.Opt(UserProfile)], ['query']),
     'getUsersWithGoldAbove' : IDL.Func(
         [IDL.Nat],
@@ -756,11 +775,22 @@ export const idlFactory = ({ IDL }) => {
     'markAsRead' : IDL.Func([ConversationId], [], []),
     'markMessagesAsRead' : IDL.Func([ConversationId], [], []),
     'markNotificationsRead' : IDL.Func([], [], []),
+    'recordChannelPostView' : IDL.Func([ChannelPostId], [], []),
     'recordStatusView' : IDL.Func([StatusId], [], []),
     'removeGroupMember' : IDL.Func([ConversationId, UserId], [], []),
+    'removeHighlight' : IDL.Func(
+        [StatusId],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
     'requestBuyGold' : IDL.Func([IDL.Nat], [], []),
     'requestSellGold' : IDL.Func([IDL.Nat], [], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+    'saveHighlight' : IDL.Func(
+        [StatusId],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
     'searchUserByUsername' : IDL.Func(
         [IDL.Text],
         [IDL.Opt(IDL.Record({ 'userId' : UserId, 'profile' : UserProfile }))],

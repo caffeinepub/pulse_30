@@ -64,9 +64,8 @@ function StatusViewer({
   const isOwnStatus = authorUserId === currentUserId;
 
   const { data: interactions } = useGetStatusInteractions(status?.id ?? null);
-  const { data: viewCount = 0 } = useGetStatusViewCount(
-    isOwnStatus ? (status?.id ?? null) : null,
-  );
+  // View count is visible to all users — fetch for every story
+  const { data: viewCount = 0 } = useGetStatusViewCount(status?.id ?? null);
   const likeStatus = useLikeStatus();
   const unlikeStatus = useUnlikeStatus();
   const commentOnStatus = useCommentOnStatus();
@@ -79,13 +78,13 @@ function StatusViewer({
     }
   }, [index]);
 
-  // Record view when a story is opened (not for own stories)
+  // Record view for all users when a story is opened (own story views are not counted by backend)
   // biome-ignore lint/correctness/useExhaustiveDependencies: record view once per status change
   useEffect(() => {
-    if (!isOwnStatus && status?.id !== undefined) {
+    if (status?.id !== undefined) {
       recordView.mutate(status.id);
     }
-  }, [status?.id, isOwnStatus]);
+  }, [status?.id]);
 
   if (!status) return null;
 
@@ -156,8 +155,8 @@ function StatusViewer({
             {formatStatusTime(status.timestamp)}
           </p>
         </div>
-        {/* View count — only shown to the story owner */}
-        {isOwnStatus && (
+        {/* View count — visible to all users */}
+        {viewCount > 0 && (
           <div
             className="flex items-center gap-1 px-2 py-1 rounded-full shrink-0"
             style={{ background: "oklch(0.15 0.01 55 / 0.7)" }}

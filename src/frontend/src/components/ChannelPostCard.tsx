@@ -28,6 +28,7 @@ import {
   Bookmark,
   BookmarkCheck,
   Edit,
+  Eye,
   Heart,
   Loader2,
   MessageCircle,
@@ -44,7 +45,9 @@ import {
   useDeleteChannelPost,
   useEditChannelPost,
   useGetChannelPostInteractions,
+  useGetChannelPostViewCount,
   useLikeChannelPost,
+  useRecordChannelPostView,
   useUnbookmarkPost,
   useUnlikeChannelPost,
 } from "../hooks/useQueries";
@@ -264,6 +267,14 @@ export default function ChannelPostCard({
   const editPost = useEditChannelPost(channelId);
   const bookmarkPost = useBookmarkPost();
   const unbookmarkPost = useUnbookmarkPost();
+  const recordView = useRecordChannelPostView();
+  const { data: viewCount = 0 } = useGetChannelPostViewCount(post.id);
+
+  // Record view once when post is first rendered
+  // biome-ignore lint/correctness/useExhaustiveDependencies: record once per post mount
+  useEffect(() => {
+    recordView.mutate(post.id);
+  }, [post.id]);
 
   const likeCount = Number(interactions?.likeCount ?? 0);
   const likedByMe = interactions?.likedByMe ?? false;
@@ -546,6 +557,19 @@ export default function ChannelPostCard({
         >
           <Share2 className="h-4 w-4 text-muted-foreground" />
         </button>
+
+        {/* View count — visible to all users */}
+        {viewCount > 0 && (
+          <div
+            className="flex items-center gap-1 px-2 py-1.5"
+            data-ocid={`channel.post.view_count.${ocid}`}
+          >
+            <Eye className="h-3.5 w-3.5 text-muted-foreground/60" />
+            <span className="text-xs text-muted-foreground/60">
+              {viewCount}
+            </span>
+          </div>
+        )}
 
         <button
           type="button"

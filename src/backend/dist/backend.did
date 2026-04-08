@@ -267,6 +267,7 @@ service : {
   getChannel: (channelId: ChannelId) -> (opt ChannelWithMeta) query;
   getChannelPostInteractions: (postId: ChannelPostId) ->
    (ChannelPostInteractions) query;
+  getChannelPostViewCount: (postId: ChannelPostId) -> (nat) query;
   getChannelPosts: (channelId: ChannelId) -> (vec ChannelPost) query;
   getContactStatuses: () -> (vec record {
                                    UserProfile;
@@ -282,6 +283,7 @@ service : {
                                  ConversationId;
                                  UserId;
                                }) query;
+  getHighlightedStatuses: (userId: UserId) -> (vec Status) query;
   getMessageReadReceipts: (conversationId: ConversationId, messageId:
    MessageId) -> (opt vec MessageReadReceipt) query;
   getMessages: (conversationId: ConversationId, offset: nat, limit: nat) ->
@@ -291,6 +293,7 @@ service : {
   getMyConversations: () -> (vec Conversation) query;
   getMyGoldBalance: () -> (nat) query;
   getMyGoldTransactions: () -> (vec GoldTransaction) query;
+  getMyHighlights: () -> (vec StatusId) query;
   getMyNotifications: () -> (vec AppNotification) query;
   getMyStatuses: () -> (vec Status) query;
   getMyTransactionHistory: () -> (vec GoldTransaction) query;
@@ -300,6 +303,7 @@ service : {
   getStatusViewCount: (statusId: StatusId) -> (nat) query;
   getUnreadCount: (conversationId: ConversationId) -> (nat) query;
   getUserByPrincipal: (userId: UserId) -> (opt UserProfile) query;
+  getUserHighlights: (userId: UserId) -> (vec StatusId) query;
   getUserProfile: (userId: UserId) -> (opt UserProfile) query;
   getUsersWithGoldAbove: (threshold: nat) -> (vec DealerInfo) query;
   isBlockedBy: (targetUserId: UserId) -> (bool) query;
@@ -312,11 +316,20 @@ service : {
   markAsRead: (conversationId: ConversationId) -> ();
   markMessagesAsRead: (conversationId: ConversationId) -> ();
   markNotificationsRead: () -> ();
+  recordChannelPostView: (postId: ChannelPostId) -> ();
   recordStatusView: (statusId: StatusId) -> ();
   removeGroupMember: (conversationId: ConversationId, memberId: UserId) -> ();
+  removeHighlight: (statusId: StatusId) -> (variant {
+                                              err: text;
+                                              ok;
+                                            });
   requestBuyGold: (amount: nat) -> ();
   requestSellGold: (amount: nat) -> ();
   saveCallerUserProfile: (profile: UserProfile) -> ();
+  saveHighlight: (statusId: StatusId) -> (variant {
+                                            err: text;
+                                            ok;
+                                          });
   searchUserByUsername: (username: text) ->
    (opt record {
           profile: UserProfile;
