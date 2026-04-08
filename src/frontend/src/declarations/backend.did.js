@@ -8,14 +8,14 @@
 
 import { IDL } from '@icp-sdk/core/candid';
 
-export const _CaffeineStorageCreateCertificateResult = IDL.Record({
+export const _ImmutableObjectStorageCreateCertificateResult = IDL.Record({
   'method' : IDL.Text,
   'blob_hash' : IDL.Text,
 });
-export const _CaffeineStorageRefillInformation = IDL.Record({
+export const _ImmutableObjectStorageRefillInformation = IDL.Record({
   'proposed_top_up_amount' : IDL.Opt(IDL.Nat),
 });
-export const _CaffeineStorageRefillResult = IDL.Record({
+export const _ImmutableObjectStorageRefillResult = IDL.Record({
   'success' : IDL.Opt(IDL.Bool),
   'topped_up_amount' : IDL.Opt(IDL.Nat),
 });
@@ -76,6 +76,14 @@ export const Status = IDL.Record({
   'content' : StatusContent,
   'author' : UserId,
   'timestamp' : Timestamp,
+});
+export const AnalyticsResult = IDL.Record({
+  'activeUsers' : IDL.Nat,
+  'channelsCreated' : IDL.Nat,
+  'totalMessages' : IDL.Nat,
+  'totalGoldVolume' : IDL.Float64,
+  'storiesPosted' : IDL.Nat,
+  'totalUsers' : IDL.Nat,
 });
 export const ChannelCommentWithProfile = IDL.Record({
   'id' : ChannelCommentId,
@@ -185,33 +193,33 @@ export const DealerInfo = IDL.Record({
 export const MessageInput = IDL.Record({ 'content' : MessageContent });
 
 export const idlService = IDL.Service({
-  '_caffeineStorageBlobIsLive' : IDL.Func(
-      [IDL.Vec(IDL.Nat8)],
-      [IDL.Bool],
+  '_immutableObjectStorageBlobsAreLive' : IDL.Func(
+      [IDL.Vec(IDL.Vec(IDL.Nat8))],
+      [IDL.Vec(IDL.Bool)],
       ['query'],
     ),
-  '_caffeineStorageBlobsToDelete' : IDL.Func(
+  '_immutableObjectStorageBlobsToDelete' : IDL.Func(
       [],
       [IDL.Vec(IDL.Vec(IDL.Nat8))],
       ['query'],
     ),
-  '_caffeineStorageConfirmBlobDeletion' : IDL.Func(
+  '_immutableObjectStorageConfirmBlobDeletion' : IDL.Func(
       [IDL.Vec(IDL.Vec(IDL.Nat8))],
       [],
       [],
     ),
-  '_caffeineStorageCreateCertificate' : IDL.Func(
+  '_immutableObjectStorageCreateCertificate' : IDL.Func(
       [IDL.Text],
-      [_CaffeineStorageCreateCertificateResult],
+      [_ImmutableObjectStorageCreateCertificateResult],
       [],
     ),
-  '_caffeineStorageRefillCashier' : IDL.Func(
-      [IDL.Opt(_CaffeineStorageRefillInformation)],
-      [_CaffeineStorageRefillResult],
+  '_immutableObjectStorageRefillCashier' : IDL.Func(
+      [IDL.Opt(_ImmutableObjectStorageRefillInformation)],
+      [_ImmutableObjectStorageRefillResult],
       [],
     ),
-  '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
-  '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+  '_immutableObjectStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
+  '_initializeAccessControl' : IDL.Func([], [], []),
   'addChannelPost' : IDL.Func(
       [ChannelId, ChannelPostContent],
       [ChannelPostId],
@@ -222,6 +230,11 @@ export const idlService = IDL.Service({
   'adminClaimGold' : IDL.Func([IDL.Nat], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
   'blockUser' : IDL.Func([UserId], [], []),
+  'bookmarkPost' : IDL.Func(
+      [ChannelPostId],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
   'commentOnChannelPost' : IDL.Func(
       [ChannelPostId, IDL.Text],
       [ChannelCommentId],
@@ -258,6 +271,7 @@ export const idlService = IDL.Service({
       [IDL.Vec(IDL.Tuple(UserProfile, IDL.Vec(Status)))],
       ['query'],
     ),
+  'getAnalytics' : IDL.Func([], [AnalyticsResult], ['query']),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getChannel' : IDL.Func([ChannelId], [IDL.Opt(ChannelWithMeta)], ['query']),
@@ -298,6 +312,7 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'getMyBlockedUsers' : IDL.Func([], [IDL.Vec(UserProfile)], ['query']),
+  'getMyBookmarkedPosts' : IDL.Func([], [IDL.Vec(ChannelPost)], ['query']),
   'getMyConversations' : IDL.Func([], [IDL.Vec(Conversation)], ['query']),
   'getMyGoldBalance' : IDL.Func([], [IDL.Nat], ['query']),
   'getMyGoldTransactions' : IDL.Func([], [IDL.Vec(GoldTransaction)], ['query']),
@@ -318,6 +333,7 @@ export const idlService = IDL.Service({
       [StatusInteractions],
       ['query'],
     ),
+  'getStatusViewCount' : IDL.Func([StatusId], [IDL.Nat], ['query']),
   'getUnreadCount' : IDL.Func([ConversationId], [IDL.Nat], ['query']),
   'getUserByPrincipal' : IDL.Func([UserId], [IDL.Opt(UserProfile)], ['query']),
   'getUserProfile' : IDL.Func([UserId], [IDL.Opt(UserProfile)], ['query']),
@@ -336,6 +352,7 @@ export const idlService = IDL.Service({
   'markAsRead' : IDL.Func([ConversationId], [], []),
   'markMessagesAsRead' : IDL.Func([ConversationId], [], []),
   'markNotificationsRead' : IDL.Func([], [], []),
+  'recordStatusView' : IDL.Func([StatusId], [], []),
   'removeGroupMember' : IDL.Func([ConversationId, UserId], [], []),
   'requestBuyGold' : IDL.Func([IDL.Nat], [], []),
   'requestSellGold' : IDL.Func([IDL.Nat], [], []),
@@ -353,6 +370,11 @@ export const idlService = IDL.Service({
   'sendMessage' : IDL.Func([ConversationId, MessageInput], [MessageId], []),
   'transferGold' : IDL.Func([IDL.Text, IDL.Nat], [], []),
   'unblockUser' : IDL.Func([UserId], [], []),
+  'unbookmarkPost' : IDL.Func(
+      [ChannelPostId],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
   'unfollowChannel' : IDL.Func([ChannelId], [], []),
   'unlikeChannelPost' : IDL.Func([ChannelPostId], [], []),
   'unlikeStatus' : IDL.Func([StatusId], [], []),
@@ -372,14 +394,14 @@ export const idlService = IDL.Service({
 export const idlInitArgs = [];
 
 export const idlFactory = ({ IDL }) => {
-  const _CaffeineStorageCreateCertificateResult = IDL.Record({
+  const _ImmutableObjectStorageCreateCertificateResult = IDL.Record({
     'method' : IDL.Text,
     'blob_hash' : IDL.Text,
   });
-  const _CaffeineStorageRefillInformation = IDL.Record({
+  const _ImmutableObjectStorageRefillInformation = IDL.Record({
     'proposed_top_up_amount' : IDL.Opt(IDL.Nat),
   });
-  const _CaffeineStorageRefillResult = IDL.Record({
+  const _ImmutableObjectStorageRefillResult = IDL.Record({
     'success' : IDL.Opt(IDL.Bool),
     'topped_up_amount' : IDL.Opt(IDL.Nat),
   });
@@ -440,6 +462,14 @@ export const idlFactory = ({ IDL }) => {
     'content' : StatusContent,
     'author' : UserId,
     'timestamp' : Timestamp,
+  });
+  const AnalyticsResult = IDL.Record({
+    'activeUsers' : IDL.Nat,
+    'channelsCreated' : IDL.Nat,
+    'totalMessages' : IDL.Nat,
+    'totalGoldVolume' : IDL.Float64,
+    'storiesPosted' : IDL.Nat,
+    'totalUsers' : IDL.Nat,
   });
   const ChannelCommentWithProfile = IDL.Record({
     'id' : ChannelCommentId,
@@ -555,33 +585,33 @@ export const idlFactory = ({ IDL }) => {
   const MessageInput = IDL.Record({ 'content' : MessageContent });
   
   return IDL.Service({
-    '_caffeineStorageBlobIsLive' : IDL.Func(
-        [IDL.Vec(IDL.Nat8)],
-        [IDL.Bool],
+    '_immutableObjectStorageBlobsAreLive' : IDL.Func(
+        [IDL.Vec(IDL.Vec(IDL.Nat8))],
+        [IDL.Vec(IDL.Bool)],
         ['query'],
       ),
-    '_caffeineStorageBlobsToDelete' : IDL.Func(
+    '_immutableObjectStorageBlobsToDelete' : IDL.Func(
         [],
         [IDL.Vec(IDL.Vec(IDL.Nat8))],
         ['query'],
       ),
-    '_caffeineStorageConfirmBlobDeletion' : IDL.Func(
+    '_immutableObjectStorageConfirmBlobDeletion' : IDL.Func(
         [IDL.Vec(IDL.Vec(IDL.Nat8))],
         [],
         [],
       ),
-    '_caffeineStorageCreateCertificate' : IDL.Func(
+    '_immutableObjectStorageCreateCertificate' : IDL.Func(
         [IDL.Text],
-        [_CaffeineStorageCreateCertificateResult],
+        [_ImmutableObjectStorageCreateCertificateResult],
         [],
       ),
-    '_caffeineStorageRefillCashier' : IDL.Func(
-        [IDL.Opt(_CaffeineStorageRefillInformation)],
-        [_CaffeineStorageRefillResult],
+    '_immutableObjectStorageRefillCashier' : IDL.Func(
+        [IDL.Opt(_ImmutableObjectStorageRefillInformation)],
+        [_ImmutableObjectStorageRefillResult],
         [],
       ),
-    '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
-    '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+    '_immutableObjectStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
+    '_initializeAccessControl' : IDL.Func([], [], []),
     'addChannelPost' : IDL.Func(
         [ChannelId, ChannelPostContent],
         [ChannelPostId],
@@ -592,6 +622,11 @@ export const idlFactory = ({ IDL }) => {
     'adminClaimGold' : IDL.Func([IDL.Nat], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
     'blockUser' : IDL.Func([UserId], [], []),
+    'bookmarkPost' : IDL.Func(
+        [ChannelPostId],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
     'commentOnChannelPost' : IDL.Func(
         [ChannelPostId, IDL.Text],
         [ChannelCommentId],
@@ -628,6 +663,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(IDL.Tuple(UserProfile, IDL.Vec(Status)))],
         ['query'],
       ),
+    'getAnalytics' : IDL.Func([], [AnalyticsResult], ['query']),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getChannel' : IDL.Func([ChannelId], [IDL.Opt(ChannelWithMeta)], ['query']),
@@ -672,6 +708,7 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'getMyBlockedUsers' : IDL.Func([], [IDL.Vec(UserProfile)], ['query']),
+    'getMyBookmarkedPosts' : IDL.Func([], [IDL.Vec(ChannelPost)], ['query']),
     'getMyConversations' : IDL.Func([], [IDL.Vec(Conversation)], ['query']),
     'getMyGoldBalance' : IDL.Func([], [IDL.Nat], ['query']),
     'getMyGoldTransactions' : IDL.Func(
@@ -696,6 +733,7 @@ export const idlFactory = ({ IDL }) => {
         [StatusInteractions],
         ['query'],
       ),
+    'getStatusViewCount' : IDL.Func([StatusId], [IDL.Nat], ['query']),
     'getUnreadCount' : IDL.Func([ConversationId], [IDL.Nat], ['query']),
     'getUserByPrincipal' : IDL.Func(
         [UserId],
@@ -718,6 +756,7 @@ export const idlFactory = ({ IDL }) => {
     'markAsRead' : IDL.Func([ConversationId], [], []),
     'markMessagesAsRead' : IDL.Func([ConversationId], [], []),
     'markNotificationsRead' : IDL.Func([], [], []),
+    'recordStatusView' : IDL.Func([StatusId], [], []),
     'removeGroupMember' : IDL.Func([ConversationId, UserId], [], []),
     'requestBuyGold' : IDL.Func([IDL.Nat], [], []),
     'requestSellGold' : IDL.Func([IDL.Nat], [], []),
@@ -735,6 +774,11 @@ export const idlFactory = ({ IDL }) => {
     'sendMessage' : IDL.Func([ConversationId, MessageInput], [MessageId], []),
     'transferGold' : IDL.Func([IDL.Text, IDL.Nat], [], []),
     'unblockUser' : IDL.Func([UserId], [], []),
+    'unbookmarkPost' : IDL.Func(
+        [ChannelPostId],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
     'unfollowChannel' : IDL.Func([ChannelId], [], []),
     'unlikeChannelPost' : IDL.Func([ChannelPostId], [], []),
     'unlikeStatus' : IDL.Func([StatusId], [], []),

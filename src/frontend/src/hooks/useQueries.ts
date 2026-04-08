@@ -1058,3 +1058,105 @@ export function useSearchUsers() {
     },
   });
 }
+
+// ─── Bookmark Hooks ──────────────────────────────────────────────────────────
+
+export function useBookmarkPost() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (postId: ChannelPostId) => {
+      if (!actor) throw new Error("Actor not available");
+      await (actor as any).bookmarkPost(postId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["myBookmarkedPosts"] });
+    },
+  });
+}
+
+export function useUnbookmarkPost() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (postId: ChannelPostId) => {
+      if (!actor) throw new Error("Actor not available");
+      await (actor as any).unbookmarkPost(postId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["myBookmarkedPosts"] });
+    },
+  });
+}
+
+export function useGetMyBookmarkedPosts() {
+  const { actor, isFetching } = useActor();
+  return useQuery<ChannelPost[]>({
+    queryKey: ["myBookmarkedPosts"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return (actor as any).getMyBookmarkedPosts();
+    },
+    enabled: !!actor && !isFetching,
+    refetchInterval: 30000,
+  });
+}
+
+// ─── Story Viewer Count Hooks ─────────────────────────────────────────────────
+
+export function useRecordStatusView() {
+  const { actor } = useActor();
+  return useMutation({
+    mutationFn: async (statusId: StatusId) => {
+      if (!actor) throw new Error("Actor not available");
+      await (actor as any).recordStatusView(statusId);
+    },
+  });
+}
+
+export function useGetStatusViewCount(statusId: StatusId | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<number>({
+    queryKey: ["statusViewCount", statusId?.toString()],
+    queryFn: async () => {
+      if (!actor || statusId === null) return 0;
+      const count = await (actor as any).getStatusViewCount(statusId);
+      return Number(count);
+    },
+    enabled: !!actor && !isFetching && statusId !== null,
+    refetchInterval: 30000,
+  });
+}
+
+// ─── Analytics Hook ──────────────────────────────────────────────────────────
+
+export interface AnalyticsResult {
+  totalUsers: number;
+  totalMessages: number;
+  totalGoldVolume: number;
+  activeUsers: number;
+  channelsCreated: number;
+  storiesPosted: number;
+}
+
+export function useGetAnalytics() {
+  const { actor, isFetching } = useActor();
+  return useQuery<AnalyticsResult | null>({
+    queryKey: ["analytics"],
+    queryFn: async () => {
+      if (!actor) return null;
+      const raw = await (actor as any).getAnalytics();
+      if (!raw) return null;
+      return {
+        totalUsers: Number(raw.totalUsers),
+        totalMessages: Number(raw.totalMessages),
+        totalGoldVolume: Number(raw.totalGoldVolume),
+        activeUsers: Number(raw.activeUsers),
+        channelsCreated: Number(raw.channelsCreated),
+        storiesPosted: Number(raw.storiesPosted),
+      };
+    },
+    enabled: !!actor && !isFetching,
+    refetchInterval: 60000,
+  });
+}

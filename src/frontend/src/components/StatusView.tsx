@@ -1,7 +1,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Heart, Plus, Send, X } from "lucide-react";
+import { Eye, Heart, Plus, Send, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import type { Status, UserProfile } from "../backend";
@@ -10,7 +10,9 @@ import {
   useGetAllStories,
   useGetMyStatuses,
   useGetStatusInteractions,
+  useGetStatusViewCount,
   useLikeStatus,
+  useRecordStatusView,
   useUnlikeStatus,
 } from "../hooks/useQueries";
 import AddStatusModal from "./AddStatusModal";
@@ -59,11 +61,16 @@ function StatusViewer({
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const status = statuses[index];
+  const isOwnStatus = authorUserId === currentUserId;
 
   const { data: interactions } = useGetStatusInteractions(status?.id ?? null);
+  const { data: viewCount = 0 } = useGetStatusViewCount(
+    isOwnStatus ? (status?.id ?? null) : null,
+  );
   const likeStatus = useLikeStatus();
   const unlikeStatus = useUnlikeStatus();
   const commentOnStatus = useCommentOnStatus();
+  const recordView = useRecordStatusView();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally re-run when index changes to reload video
   useEffect(() => {
@@ -72,11 +79,18 @@ function StatusViewer({
     }
   }, [index]);
 
+  // Record view when a story is opened (not for own stories)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: record view once per status change
+  useEffect(() => {
+    if (!isOwnStatus && status?.id !== undefined) {
+      recordView.mutate(status.id);
+    }
+  }, [status?.id, isOwnStatus]);
+
   if (!status) return null;
 
   const mediaKind = status.content.mediaType?.__kind__;
   const isVideo = mediaKind === "video";
-  const isOwnStatus = authorUserId === currentUserId;
 
   const goNext = () => {
     if (index < statuses.length - 1) setIndex(index + 1);
@@ -142,6 +156,25 @@ function StatusViewer({
             {formatStatusTime(status.timestamp)}
           </p>
         </div>
+        {/* View count — only shown to the story owner */}
+        {isOwnStatus && (
+          <div
+            className="flex items-center gap-1 px-2 py-1 rounded-full shrink-0"
+            style={{ background: "oklch(0.15 0.01 55 / 0.7)" }}
+            data-ocid="status.view_count"
+          >
+            <Eye
+              className="h-3.5 w-3.5"
+              style={{ color: "oklch(0.82 0.15 72)" }}
+            />
+            <span
+              className="text-xs font-semibold"
+              style={{ color: "oklch(0.82 0.15 72)" }}
+            >
+              {viewCount}
+            </span>
+          </div>
+        )}
         <Button
           size="icon"
           variant="ghost"

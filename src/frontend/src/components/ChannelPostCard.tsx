@@ -25,6 +25,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Bookmark,
+  BookmarkCheck,
   Edit,
   Heart,
   Loader2,
@@ -37,11 +39,13 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  useBookmarkPost,
   useCommentOnChannelPost,
   useDeleteChannelPost,
   useEditChannelPost,
   useGetChannelPostInteractions,
   useLikeChannelPost,
+  useUnbookmarkPost,
   useUnlikeChannelPost,
 } from "../hooks/useQueries";
 import type {
@@ -229,6 +233,7 @@ interface ChannelPostCardProps {
   currentUserId: string;
   channelId: ChannelId;
   index: number;
+  isBookmarked?: boolean;
 }
 
 export default function ChannelPostCard({
@@ -240,6 +245,7 @@ export default function ChannelPostCard({
   currentUserId,
   channelId,
   index,
+  isBookmarked = false,
 }: ChannelPostCardProps) {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -248,6 +254,7 @@ export default function ChannelPostCard({
   const [editText, setEditText] = useState(post.content.text);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [showFullText, setShowFullText] = useState(false);
+  const [bookmarked, setBookmarked] = useState(isBookmarked);
 
   const { data: interactions } = useGetChannelPostInteractions(post.id);
   const likePost = useLikeChannelPost();
@@ -255,6 +262,8 @@ export default function ChannelPostCard({
   const commentOnPost = useCommentOnChannelPost();
   const deletePost = useDeleteChannelPost(channelId);
   const editPost = useEditChannelPost(channelId);
+  const bookmarkPost = useBookmarkPost();
+  const unbookmarkPost = useUnbookmarkPost();
 
   const likeCount = Number(interactions?.likeCount ?? 0);
   const likedByMe = interactions?.likedByMe ?? false;
@@ -265,6 +274,26 @@ export default function ChannelPostCard({
       unlikePost.mutate(post.id);
     } else {
       likePost.mutate(post.id);
+    }
+  };
+
+  const handleBookmark = () => {
+    if (bookmarked) {
+      unbookmarkPost.mutate(post.id, {
+        onSuccess: () => {
+          setBookmarked(false);
+          toast.success("Removed from bookmarks");
+        },
+        onError: () => toast.error("Failed to remove bookmark"),
+      });
+    } else {
+      bookmarkPost.mutate(post.id, {
+        onSuccess: () => {
+          setBookmarked(true);
+          toast.success("Bookmarked!");
+        },
+        onError: () => toast.error("Failed to bookmark post"),
+      });
     }
   };
 
@@ -516,6 +545,24 @@ export default function ChannelPostCard({
           aria-label="Forward"
         >
           <Share2 className="h-4 w-4 text-muted-foreground" />
+        </button>
+
+        <button
+          type="button"
+          data-ocid={`channel.post.bookmark_button.${ocid}`}
+          onClick={handleBookmark}
+          disabled={bookmarkPost.isPending || unbookmarkPost.isPending}
+          className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-muted/50 transition-colors ml-auto disabled:opacity-40"
+          aria-label={bookmarked ? "Remove bookmark" : "Bookmark"}
+        >
+          {bookmarked ? (
+            <BookmarkCheck
+              className="h-4 w-4"
+              style={{ color: "oklch(0.82 0.15 72)" }}
+            />
+          ) : (
+            <Bookmark className="h-4 w-4 text-muted-foreground" />
+          )}
         </button>
       </div>
 

@@ -19,23 +19,31 @@ export interface ChannelPostInteractions {
     comments: Array<ChannelCommentWithProfile>;
     likedByMe: boolean;
 }
+export interface AnalyticsResult {
+    activeUsers: bigint;
+    channelsCreated: bigint;
+    totalMessages: bigint;
+    totalGoldVolume: number;
+    storiesPosted: bigint;
+    totalUsers: bigint;
+}
 export interface MessageContent {
     text: string;
     mediaUrl?: string;
     mediaType?: MediaType;
 }
 export type ConversationId = bigint;
-export interface ChannelCommentWithProfile {
-    id: ChannelCommentId;
-    text: string;
-    author: UserProfile;
-    timestamp: Timestamp;
-}
 export interface ChannelPost {
     id: ChannelPostId;
     content: ChannelPostContent;
     channelId: ChannelId;
     author: UserId;
+    timestamp: Timestamp;
+}
+export interface ChannelCommentWithProfile {
+    id: ChannelCommentId;
+    text: string;
+    author: UserProfile;
     timestamp: Timestamp;
 }
 export type ChannelPostId = bigint;
@@ -51,11 +59,11 @@ export type ConversationType = {
     __kind__: "direct";
     direct: null;
 };
-export type GoldTxId = bigint;
 export interface MessageReadReceipt {
     userId: UserId;
     timestamp: Timestamp;
 }
+export type GoldTxId = bigint;
 export type MediaType = {
     __kind__: "audio";
     audio: null;
@@ -209,6 +217,13 @@ export interface backendInterface {
     adminClaimGold(amount: bigint): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     blockUser(targetUserId: UserId): Promise<void>;
+    bookmarkPost(postId: ChannelPostId): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     commentOnChannelPost(postId: ChannelPostId, text: string): Promise<ChannelCommentId>;
     commentOnStatus(statusId: StatusId, text: string): Promise<CommentId>;
     createChannel(name: string, description: string, avatarUrl: string | null): Promise<ChannelId>;
@@ -225,6 +240,7 @@ export interface backendInterface {
     getAdminTotalClaimed(): Promise<bigint>;
     getAllChannels(): Promise<Array<ChannelWithMeta>>;
     getAllStories(): Promise<Array<[UserProfile, Array<Status>]>>;
+    getAnalytics(): Promise<AnalyticsResult>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getChannel(channelId: ChannelId): Promise<ChannelWithMeta | null>;
@@ -237,6 +253,7 @@ export interface backendInterface {
     getMessageReadReceipts(conversationId: ConversationId, messageId: MessageId): Promise<Array<MessageReadReceipt> | null>;
     getMessages(conversationId: ConversationId, offset: bigint, limit: bigint): Promise<Array<Message>>;
     getMyBlockedUsers(): Promise<Array<UserProfile>>;
+    getMyBookmarkedPosts(): Promise<Array<ChannelPost>>;
     getMyConversations(): Promise<Array<Conversation>>;
     getMyGoldBalance(): Promise<bigint>;
     getMyGoldTransactions(): Promise<Array<GoldTransaction>>;
@@ -245,6 +262,7 @@ export interface backendInterface {
     getMyTransactionHistory(): Promise<Array<GoldTransaction>>;
     getPaginatedMessages(conversationId: ConversationId, offset: bigint, limit: bigint): Promise<Array<Message>>;
     getStatusInteractions(statusId: StatusId): Promise<StatusInteractions>;
+    getStatusViewCount(statusId: StatusId): Promise<bigint>;
     getUnreadCount(conversationId: ConversationId): Promise<bigint>;
     getUserByPrincipal(userId: UserId): Promise<UserProfile | null>;
     getUserProfile(userId: UserId): Promise<UserProfile | null>;
@@ -259,6 +277,7 @@ export interface backendInterface {
     markAsRead(conversationId: ConversationId): Promise<void>;
     markMessagesAsRead(conversationId: ConversationId): Promise<void>;
     markNotificationsRead(): Promise<void>;
+    recordStatusView(statusId: StatusId): Promise<void>;
     removeGroupMember(conversationId: ConversationId, memberId: UserId): Promise<void>;
     requestBuyGold(amount: bigint): Promise<void>;
     requestSellGold(amount: bigint): Promise<void>;
@@ -274,6 +293,13 @@ export interface backendInterface {
     sendMessage(conversationId: ConversationId, messageInput: MessageInput): Promise<MessageId>;
     transferGold(toUsername: string, amount: bigint): Promise<void>;
     unblockUser(targetUserId: UserId): Promise<void>;
+    unbookmarkPost(postId: ChannelPostId): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     unfollowChannel(channelId: ChannelId): Promise<void>;
     unlikeChannelPost(postId: ChannelPostId): Promise<void>;
     unlikeStatus(statusId: StatusId): Promise<void>;

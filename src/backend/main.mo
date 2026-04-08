@@ -11,17 +11,17 @@ import Set "mo:core/Set";
 import Principal "mo:core/Principal";
 import Iter "mo:core/Iter";
 import Runtime "mo:core/Runtime";
-import MixinAuthorization "authorization/MixinAuthorization";
-import AccessControl "authorization/access-control";
-import MixinStorage "blob-storage/Mixin";
-import _Storage "blob-storage/Storage";
+import MixinAuthorization "mo:caffeineai-authorization/MixinAuthorization";
+import AccessControl "mo:caffeineai-authorization/access-control";
+import MixinObjectStorage "mo:caffeineai-object-storage/Mixin";
+import _Storage "mo:caffeineai-object-storage/Storage";
 
 
 
 actor {
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
-  include MixinStorage();
+  include MixinObjectStorage();
 
   // Type Definitions
   type UserId = Principal;
@@ -205,6 +205,16 @@ actor {
     timestamp : Timestamp;
   };
 
+  // Analytics result type
+  public type AnalyticsResult = {
+    totalUsers : Nat;
+    totalMessages : Nat;
+    totalGoldVolume : Float;
+    activeUsers : Nat;
+    channelsCreated : Nat;
+    storiesPosted : Nat;
+  };
+
   // Message DTOs
   public type MessageInput = {
     content : MessageContent;
@@ -247,6 +257,12 @@ actor {
 
   // Stable notifications store
   stable let notifications = Map.empty<UserId, List.List<AppNotification>>();
+
+  // Post bookmarks: caller -> list of bookmarked post IDs
+  stable let channelPostBookmarks = Map.empty<UserId, Set.Set<ChannelPostId>>();
+
+  // Story viewers: statusId -> set of viewer principals (deduped)
+  stable let statusViewers = Map.empty<StatusId, Set.Set<UserId>>();
 
   // Block System State
   let blockedUsers = Map.empty<UserId, Set.Set<UserId>>();
@@ -1856,5 +1872,130 @@ actor {
       case (null) { [] };
       case (?lst) { lst.toArray() };
     };
+  };
+
+  // ============================================================
+  // Post Bookmark Endpoints
+  // ============================================================
+
+  public shared ({ caller }) func bookmarkPost(postId : ChannelPostId) : async { #ok; #err : Text } {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      return #err("Unauthorized");
+    };
+    switch (channelPosts.get(postId)) {
+      case (null) { return #err("Post not found") };
+      case (?_) {};
+    };
+    let bookmarks = switch (channelPostBookmarks.get(caller)) {
+      case (null) {
+        let s = Set.empty<ChannelPostId>();
+        s;
+      };
+      case (?s) { s };
+    };
+    bookmarks.add(postId);
+    channelPostBookmarks.add(caller, bookmarks);
+    #ok;
+  };
+
+  public shared ({ caller }) func unbookmarkPost(postId : ChannelPostId) : async { #ok; #err : Text } {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      return #err("Unauthorized");
+    };
+    switch (channelPostBookmarks.get(caller)) {
+      case (null) { return #err("Post not bookmarked") };
+      case (?s) {
+        if (not s.contains(postId)) { return #err("Post not bookmarked") };
+        s.remove(postId);
+        channelPostBookmarks.add(caller, s);
+      };
+    };
+    #ok;
+  };
+
+  public query ({ caller }) func getMyBookmarkedPosts() : async [ChannelPost] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized");
+    };
+    switch (channelPostBookmarks.get(caller)) {
+      case (null) { [] };
+      case (?s) {
+        s.toArray().filterMap(func(postId) { channelPosts.get(postId) });
+      };
+    };
+  };
+
+  // ============================================================
+  // Story Viewer Count Endpoints
+  // ============================================================
+
+  public shared ({ caller }) func recordStatusView(statusId : StatusId) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized");
+    };
+    // Do not record the author viewing their own story
+    switch (statuses.get(statusId)) {
+      case (null) { return };
+      case (?status) {
+        if (status.author == caller) { return };
+      };
+    };
+    let viewers = switch (statusViewers.get(statusId)) {
+      case (null) {
+        let s = Set.empty<UserId>();
+        s;
+      };
+      case (?s) { s };
+    };
+    viewers.add(caller);
+    statusViewers.add(statusId, viewers);
+  };
+
+  public query ({ caller }) func getStatusViewCount(statusId : StatusId) : async Nat {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized");
+    };
+    switch (statusViewers.get(statusId)) {
+      case (null) { 0 };
+      case (?s) { s.size() };
+    };
+  };
+
+  // ============================================================
+  // Analytics Endpoint
+  // ============================================================
+
+  public query ({ caller }) func getAnalytics() : async AnalyticsResult {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized");
+    };
+    let totalUsers = users.size();
+    let totalMessages = conversations.values().toArray().foldLeft(
+      0 : Nat,
+      func(acc, conv) { acc + conv.messages.size() }
+    );
+    let totalGoldVolume = goldTransactions.values().toArray().foldLeft(
+      0.0 : Float,
+      func(acc, txList) {
+        txList.toArray().foldLeft(acc, func(a, tx) {
+          a + tx.amount.toFloat();
+        });
+      }
+    );
+    // Active users: principals who sent at least 1 message in the last 7 days
+    let sevenDaysNs : Int = 7 * 24 * 3600 * 1_000_000_000;
+    let cutoff : Int = Time.now() - sevenDaysNs;
+    let activeSet = Set.empty<UserId>();
+    for (conv in conversations.values()) {
+      for (msg in conv.messages.vals()) {
+        if (msg.timestamp > cutoff) {
+          activeSet.add(msg.sender);
+        };
+      };
+    };
+    let activeUsers = activeSet.size();
+    let channelsCreated = channels.size();
+    let storiesPosted = statuses.size();
+    { totalUsers; totalMessages; totalGoldVolume; activeUsers; channelsCreated; storiesPosted };
   };
 };

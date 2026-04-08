@@ -7,6 +7,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import {
+  Bookmark,
   Check,
   Copy,
   Loader2,
@@ -26,12 +27,14 @@ import {
   useFollowChannel,
   useGetAllChannels,
   useGetMyBlockedUsers,
+  useGetMyBookmarkedPosts,
   useGetUserProfile,
   useIsUserOnline,
   useUnblockUser,
   useUnfollowChannel,
 } from "../hooks/useQueries";
 import type { ChannelId } from "../hooks/useQueries";
+import ChannelPostCard from "./ChannelPostCard";
 
 function getInitials(name: string) {
   return name
@@ -156,6 +159,7 @@ interface UserProfileModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onStartChat: (userId: string) => void;
+  currentUserId?: string;
 }
 
 export default function UserProfileModal({
@@ -163,6 +167,7 @@ export default function UserProfileModal({
   open,
   onOpenChange,
   onStartChat,
+  currentUserId,
 }: UserProfileModalProps) {
   const { data: profile, isLoading } = useGetUserProfile(userId);
   const { data: isOnline } = useIsUserOnline(userId);
@@ -175,6 +180,12 @@ export default function UserProfileModal({
     : false;
   const [copied, setCopied] = useState(false);
   const [showQr, setShowQr] = useState(false);
+
+  // Is the viewer looking at their own profile?
+  const isOwnProfile = !!userId && !!currentUserId && userId === currentUserId;
+
+  // Bookmarked posts — only fetched when viewing own profile
+  const { data: bookmarkedPosts = [] } = useGetMyBookmarkedPosts();
 
   // Channels owned by this user
   const userChannels = userId
@@ -415,6 +426,83 @@ export default function UserProfileModal({
                       />
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Bookmarks section — only shown on own profile */}
+              {isOwnProfile && (
+                <div className="w-full" data-ocid="profile.bookmarks.section">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Bookmark
+                      className="h-3.5 w-3.5"
+                      style={{ color: "oklch(0.82 0.15 72 / 0.7)" }}
+                    />
+                    <span
+                      className="text-xs font-semibold uppercase tracking-wider"
+                      style={{ color: "oklch(0.82 0.15 72 / 0.7)" }}
+                    >
+                      Bookmarks
+                    </span>
+                    <span
+                      className="text-xs ml-auto"
+                      style={{ color: "oklch(0.5 0.03 55)" }}
+                    >
+                      {bookmarkedPosts.length}
+                    </span>
+                  </div>
+                  {bookmarkedPosts.length === 0 ? (
+                    <div
+                      className="rounded-xl py-6 flex flex-col items-center justify-center text-center"
+                      style={{
+                        background: "oklch(0.12 0.005 55)",
+                        border: "1px dashed oklch(0.82 0.15 72 / 0.15)",
+                      }}
+                      data-ocid="profile.bookmarks.empty_state"
+                    >
+                      <Bookmark
+                        className="h-6 w-6 mb-2 opacity-30"
+                        style={{ color: "oklch(0.82 0.15 72)" }}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        No bookmarks yet
+                      </p>
+                      <p className="text-[11px] text-muted-foreground/60 mt-0.5">
+                        Tap the bookmark icon on any channel post
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-3">
+                      {bookmarkedPosts.map((post, idx) => {
+                        const channelMeta = allChannels.find(
+                          (m) =>
+                            m.channel.id.toString() ===
+                            post.channelId.toString(),
+                        );
+                        const resolvedAuthorName =
+                          channelMeta?.ownerProfile.displayName ??
+                          channelMeta?.ownerProfile.username ??
+                          "Unknown";
+                        const resolvedAuthorAvatar =
+                          channelMeta?.ownerProfile.avatarUrl ?? undefined;
+                        return (
+                          <ChannelPostCard
+                            key={post.id.toString()}
+                            post={post}
+                            authorName={resolvedAuthorName}
+                            authorAvatar={resolvedAuthorAvatar}
+                            isOwner={false}
+                            isPostAuthor={
+                              post.author.toText() === currentUserId
+                            }
+                            currentUserId={currentUserId ?? ""}
+                            channelId={post.channelId}
+                            index={idx}
+                            isBookmarked={true}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
