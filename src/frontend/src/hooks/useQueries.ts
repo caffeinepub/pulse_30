@@ -12,7 +12,10 @@ import type {
   UserId,
   UserProfile,
 } from "../backend";
-import type { backendInterface as ExtendedBackendInterface } from "../backend.d";
+import type {
+  AnalyticsRecord,
+  backendInterface as ExtendedBackendInterface,
+} from "../backend.d";
 import { useActor } from "./useActor";
 
 function extActor(actor: unknown): ExtendedBackendInterface {
@@ -757,7 +760,7 @@ export function useGetGroupAvatars() {
     queryKey: ["groupAvatars"],
     queryFn: async () => {
       if (!actor) return [];
-      return (actor as any).getGroupAvatars();
+      return extActor(actor).getGroupAvatars();
     },
     enabled: !!actor && !isFetching,
     refetchInterval: 30000,
@@ -912,10 +915,28 @@ export function useGetUsersWithGoldAbove(threshold: bigint) {
     queryKey: ["goldDealers", threshold.toString()],
     queryFn: async () => {
       if (!actor) return [];
-      return (actor as any).getUsersWithGoldAbove(threshold);
+      return extActor(actor).getUsersWithGoldAbove(threshold);
     },
     enabled: !!actor && !isFetching,
     refetchInterval: 30000,
+  });
+}
+
+export type { AnalyticsRecord };
+
+export function useGetAnalytics() {
+  const { actor, isFetching } = useActor();
+  return useQuery<AnalyticsRecord | null>({
+    queryKey: ["analytics"],
+    queryFn: async () => {
+      if (!actor) return null;
+      const result = await extActor(actor).getAnalytics();
+      if (result && result.__kind__ === "ok") return result.ok;
+      return null;
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: 60000,
+    refetchInterval: 60000,
   });
 }
 
@@ -998,7 +1019,9 @@ export function useGetGroupCreators() {
     queryKey: ["groupCreators"],
     queryFn: async () => {
       if (!actor) return [];
-      return (actor as any).getGroupCreators();
+      return extActor(actor).getGroupCreators() as unknown as Promise<
+        Array<[ConversationId, string]>
+      >;
     },
     enabled: !!actor && !isFetching,
     refetchInterval: 30000,
@@ -1017,7 +1040,7 @@ export function useAddGroupMember() {
       username: string;
     }) => {
       if (!actor) throw new Error("Actor not available");
-      await (actor as any).addGroupMember(conversationId, username);
+      await extActor(actor).addGroupMember(conversationId, username);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
@@ -1038,7 +1061,7 @@ export function useRemoveGroupMember() {
     }) => {
       if (!actor) throw new Error("Actor not available");
       const { Principal } = await import("@icp-sdk/core/principal");
-      await (actor as any).removeGroupMember(
+      await extActor(actor).removeGroupMember(
         conversationId,
         Principal.fromText(memberId),
       );
@@ -1054,208 +1077,7 @@ export function useSearchUsers() {
   return useMutation({
     mutationFn: async (query: string) => {
       if (!actor) throw new Error("Actor not available");
-      return (actor as any).searchUsers(query);
+      return extActor(actor).searchUsers(query);
     },
-  });
-}
-
-// ─── Bookmark Hooks ──────────────────────────────────────────────────────────
-
-export function useBookmarkPost() {
-  const { actor } = useActor();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (postId: ChannelPostId) => {
-      if (!actor) throw new Error("Actor not available");
-      await extActor(actor).bookmarkPost(postId);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["myBookmarkedPosts"] });
-    },
-  });
-}
-
-export function useUnbookmarkPost() {
-  const { actor } = useActor();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (postId: ChannelPostId) => {
-      if (!actor) throw new Error("Actor not available");
-      await extActor(actor).unbookmarkPost(postId);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["myBookmarkedPosts"] });
-    },
-  });
-}
-
-export function useGetMyBookmarkedPosts() {
-  const { actor, isFetching } = useActor();
-  return useQuery<ChannelPost[]>({
-    queryKey: ["myBookmarkedPosts"],
-    queryFn: async () => {
-      if (!actor) return [];
-      return extActor(actor).getMyBookmarkedPosts();
-    },
-    enabled: !!actor && !isFetching,
-    refetchInterval: 30000,
-  });
-}
-
-// ─── Story Viewer Count Hooks ─────────────────────────────────────────────────
-
-export function useRecordStatusView() {
-  const { actor } = useActor();
-  return useMutation({
-    mutationFn: async (statusId: StatusId) => {
-      if (!actor) throw new Error("Actor not available");
-      await extActor(actor).recordStatusView(statusId);
-    },
-  });
-}
-
-export function useGetStatusViewCount(statusId: StatusId | null) {
-  const { actor, isFetching } = useActor();
-  return useQuery<number>({
-    queryKey: ["statusViewCount", statusId?.toString()],
-    queryFn: async () => {
-      if (!actor || statusId === null) return 0;
-      const count = await extActor(actor).getStatusViewCount(statusId);
-      return Number(count);
-    },
-    enabled: !!actor && !isFetching && statusId !== null,
-    refetchInterval: 30000,
-  });
-}
-
-// ─── Analytics Hook ──────────────────────────────────────────────────────────
-
-export interface AnalyticsResult {
-  totalUsers: number;
-  totalMessages: number;
-  totalGoldVolume: number;
-  activeUsers: number;
-  channelsCreated: number;
-  storiesPosted: number;
-}
-
-export function useGetAnalytics() {
-  const { actor, isFetching } = useActor();
-  return useQuery<AnalyticsResult | null>({
-    queryKey: ["analytics"],
-    queryFn: async () => {
-      if (!actor) return null;
-      const raw = await (actor as any).getAnalytics();
-      if (!raw) return null;
-      return {
-        totalUsers: Number(raw.totalUsers),
-        totalMessages: Number(raw.totalMessages),
-        totalGoldVolume: Number(raw.totalGoldVolume),
-        activeUsers: Number(raw.activeUsers),
-        channelsCreated: Number(raw.channelsCreated),
-        storiesPosted: Number(raw.storiesPosted),
-      };
-    },
-    enabled: !!actor && !isFetching,
-    refetchInterval: 60000,
-  });
-}
-
-// ─── Channel Post View Count Hooks ───────────────────────────────────────────
-
-export function useRecordChannelPostView() {
-  const { actor } = useActor();
-  return useMutation({
-    mutationFn: async (postId: ChannelPostId) => {
-      if (!actor) throw new Error("Actor not available");
-      await extActor(actor).recordChannelPostView(postId);
-    },
-  });
-}
-
-export function useGetChannelPostViewCount(postId: ChannelPostId | null) {
-  const { actor, isFetching } = useActor();
-  return useQuery<number>({
-    queryKey: ["channelPostViewCount", postId?.toString()],
-    queryFn: async () => {
-      if (!actor || postId === null) return 0;
-      const count = await extActor(actor).getChannelPostViewCount(postId);
-      return Number(count);
-    },
-    enabled: !!actor && !isFetching && postId !== null,
-    refetchInterval: 60000,
-  });
-}
-
-// ─── Highlight Hooks ──────────────────────────────────────────────────────────
-
-export function useSaveHighlight() {
-  const { actor } = useActor();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (statusId: StatusId) => {
-      if (!actor) throw new Error("Actor not available");
-      await extActor(actor).saveHighlight(statusId);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["myHighlights"] });
-      queryClient.invalidateQueries({ queryKey: ["userHighlights"] });
-      queryClient.invalidateQueries({ queryKey: ["highlightedStatuses"] });
-    },
-  });
-}
-
-export function useRemoveHighlight() {
-  const { actor } = useActor();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (statusId: StatusId) => {
-      if (!actor) throw new Error("Actor not available");
-      await extActor(actor).removeHighlight(statusId);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["myHighlights"] });
-      queryClient.invalidateQueries({ queryKey: ["userHighlights"] });
-      queryClient.invalidateQueries({ queryKey: ["highlightedStatuses"] });
-    },
-  });
-}
-
-export function useGetMyHighlights() {
-  const { actor, isFetching } = useActor();
-  return useQuery<StatusId[]>({
-    queryKey: ["myHighlights"],
-    queryFn: async () => {
-      if (!actor) return [];
-      return extActor(actor).getMyHighlights();
-    },
-    enabled: !!actor && !isFetching,
-    refetchInterval: 30000,
-  });
-}
-
-export function useGetUserHighlights(userId: string | null) {
-  const { actor, isFetching } = useActor();
-  return useQuery<StatusId[]>({
-    queryKey: ["userHighlights", userId],
-    queryFn: async () => {
-      if (!actor || !userId) return [];
-      return extActor(actor).getUserHighlights(Principal.fromText(userId));
-    },
-    enabled: !!actor && !isFetching && !!userId,
-    refetchInterval: 30000,
-  });
-}
-
-export function useGetHighlightedStatuses(userId: string | null) {
-  const { actor, isFetching } = useActor();
-  return useQuery<import("../backend").Status[]>({
-    queryKey: ["highlightedStatuses", userId],
-    queryFn: async () => {
-      if (!actor || !userId) return [];
-      return extActor(actor).getHighlightedStatuses(Principal.fromText(userId));
-    },
-    enabled: !!actor && !isFetching && !!userId,
-    refetchInterval: 30000,
   });
 }

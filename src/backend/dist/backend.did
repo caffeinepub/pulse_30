@@ -205,13 +205,13 @@ type AppNotification =
    read: bool;
    timestamp: Timestamp;
  };
-type AnalyticsResult = 
+type AnalyticsRecord = 
  record {
    activeUsers: nat;
    channelsCreated: nat;
    storiesPosted: nat;
-   totalGoldVolume: float64;
-   totalMessages: nat;
+   totalGoldVolume: nat;
+   totalMessagesSent: nat;
    totalUsers: nat;
  };
 service : {
@@ -232,10 +232,6 @@ service : {
   adminClaimGold: (amount: nat) -> ();
   assignCallerUserRole: (user: principal, role: UserRole) -> ();
   blockUser: (targetUserId: UserId) -> ();
-  bookmarkPost: (postId: ChannelPostId) -> (variant {
-                                              err: text;
-                                              ok;
-                                            });
   commentOnChannelPost: (postId: ChannelPostId, "text": text) ->
    (ChannelCommentId);
   commentOnStatus: (statusId: StatusId, "text": text) -> (CommentId);
@@ -261,13 +257,15 @@ service : {
                               UserProfile;
                               vec Status;
                             }) query;
-  getAnalytics: () -> (AnalyticsResult) query;
+  getAnalytics: () -> (variant {
+                         err: text;
+                         ok: AnalyticsRecord;
+                       }) query;
   getCallerUserProfile: () -> (opt UserProfile) query;
   getCallerUserRole: () -> (UserRole) query;
   getChannel: (channelId: ChannelId) -> (opt ChannelWithMeta) query;
   getChannelPostInteractions: (postId: ChannelPostId) ->
    (ChannelPostInteractions) query;
-  getChannelPostViewCount: (postId: ChannelPostId) -> (nat) query;
   getChannelPosts: (channelId: ChannelId) -> (vec ChannelPost) query;
   getContactStatuses: () -> (vec record {
                                    UserProfile;
@@ -283,27 +281,22 @@ service : {
                                  ConversationId;
                                  UserId;
                                }) query;
-  getHighlightedStatuses: (userId: UserId) -> (vec Status) query;
   getMessageReadReceipts: (conversationId: ConversationId, messageId:
    MessageId) -> (opt vec MessageReadReceipt) query;
   getMessages: (conversationId: ConversationId, offset: nat, limit: nat) ->
    (vec Message) query;
   getMyBlockedUsers: () -> (vec UserProfile) query;
-  getMyBookmarkedPosts: () -> (vec ChannelPost) query;
   getMyConversations: () -> (vec Conversation) query;
   getMyGoldBalance: () -> (nat) query;
   getMyGoldTransactions: () -> (vec GoldTransaction) query;
-  getMyHighlights: () -> (vec StatusId) query;
   getMyNotifications: () -> (vec AppNotification) query;
   getMyStatuses: () -> (vec Status) query;
   getMyTransactionHistory: () -> (vec GoldTransaction) query;
   getPaginatedMessages: (conversationId: ConversationId, offset: nat, limit:
    nat) -> (vec Message) query;
   getStatusInteractions: (statusId: StatusId) -> (StatusInteractions) query;
-  getStatusViewCount: (statusId: StatusId) -> (nat) query;
   getUnreadCount: (conversationId: ConversationId) -> (nat) query;
   getUserByPrincipal: (userId: UserId) -> (opt UserProfile) query;
-  getUserHighlights: (userId: UserId) -> (vec StatusId) query;
   getUserProfile: (userId: UserId) -> (opt UserProfile) query;
   getUsersWithGoldAbove: (threshold: nat) -> (vec DealerInfo) query;
   isBlockedBy: (targetUserId: UserId) -> (bool) query;
@@ -316,20 +309,10 @@ service : {
   markAsRead: (conversationId: ConversationId) -> ();
   markMessagesAsRead: (conversationId: ConversationId) -> ();
   markNotificationsRead: () -> ();
-  recordChannelPostView: (postId: ChannelPostId) -> ();
-  recordStatusView: (statusId: StatusId) -> ();
   removeGroupMember: (conversationId: ConversationId, memberId: UserId) -> ();
-  removeHighlight: (statusId: StatusId) -> (variant {
-                                              err: text;
-                                              ok;
-                                            });
   requestBuyGold: (amount: nat) -> ();
   requestSellGold: (amount: nat) -> ();
   saveCallerUserProfile: (profile: UserProfile) -> ();
-  saveHighlight: (statusId: StatusId) -> (variant {
-                                            err: text;
-                                            ok;
-                                          });
   searchUserByUsername: (username: text) ->
    (opt record {
           profile: UserProfile;
@@ -344,10 +327,6 @@ service : {
    MessageInput) -> (MessageId);
   transferGold: (toUsername: text, amount: nat) -> ();
   unblockUser: (targetUserId: UserId) -> ();
-  unbookmarkPost: (postId: ChannelPostId) -> (variant {
-                                                err: text;
-                                                ok;
-                                              });
   unfollowChannel: (channelId: ChannelId) -> ();
   unlikeChannelPost: (postId: ChannelPostId) -> ();
   unlikeStatus: (statusId: StatusId) -> ();

@@ -205,16 +205,6 @@ actor {
     timestamp : Timestamp;
   };
 
-  // Analytics result type
-  public type AnalyticsResult = {
-    totalUsers : Nat;
-    totalMessages : Nat;
-    totalGoldVolume : Float;
-    activeUsers : Nat;
-    channelsCreated : Nat;
-    storiesPosted : Nat;
-  };
-
   // Message DTOs
   public type MessageInput = {
     content : MessageContent;
@@ -257,18 +247,6 @@ actor {
 
   // Stable notifications store
   stable let notifications = Map.empty<UserId, List.List<AppNotification>>();
-
-  // Post bookmarks: caller -> list of bookmarked post IDs
-  stable let channelPostBookmarks = Map.empty<UserId, Set.Set<ChannelPostId>>();
-
-  // Story viewers: statusId -> set of viewer principals (deduped)
-  stable let statusViewers = Map.empty<StatusId, Set.Set<UserId>>();
-
-  // Channel post viewers: postId -> set of viewer principals (deduped)
-  stable let channelPostViewers = Map.empty<ChannelPostId, Set.Set<UserId>>();
-
-  // Highlights: userId -> list of saved statusIds (permanent story saves)
-  stable let highlights = Map.empty<UserId, List.List<StatusId>>();
 
   // Block System State
   let blockedUsers = Map.empty<UserId, Set.Set<UserId>>();
@@ -1881,236 +1859,68 @@ actor {
   };
 
   // ============================================================
-  // Post Bookmark Endpoints
+  // Analytics Dashboard (admin @pulse only)
   // ============================================================
 
-  public shared ({ caller }) func bookmarkPost(postId : ChannelPostId) : async { #ok; #err : Text } {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+  public type AnalyticsRecord = {
+    totalUsers        : Nat;
+    totalMessagesSent : Nat;
+    totalGoldVolume   : Nat;
+    activeUsers       : Nat;
+    channelsCreated   : Nat;
+    storiesPosted     : Nat;
+  };
+
+  public query ({ caller }) func getAnalytics() : async { #ok : AnalyticsRecord; #err : Text } {
+    // Verify caller is the @pulse admin
+    let callerProfile = switch (users.get(caller)) {
+      case (null) { return #err("Unauthorized") };
+      case (?p) { p };
+    };
+    if (callerProfile.username != adminUsername) {
       return #err("Unauthorized");
     };
-    switch (channelPosts.get(postId)) {
-      case (null) { return #err("Post not found") };
-      case (?_) {};
-    };
-    let bookmarks = switch (channelPostBookmarks.get(caller)) {
-      case (null) {
-        let s = Set.empty<ChannelPostId>();
-        s;
-      };
-      case (?s) { s };
-    };
-    bookmarks.add(postId);
-    channelPostBookmarks.add(caller, bookmarks);
-    #ok;
-  };
 
-  public shared ({ caller }) func unbookmarkPost(postId : ChannelPostId) : async { #ok; #err : Text } {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      return #err("Unauthorized");
-    };
-    switch (channelPostBookmarks.get(caller)) {
-      case (null) { return #err("Post not bookmarked") };
-      case (?s) {
-        if (not s.contains(postId)) { return #err("Post not bookmarked") };
-        s.remove(postId);
-        channelPostBookmarks.add(caller, s);
-      };
-    };
-    #ok;
-  };
+    let sevenDaysNs : Int = 7 * 24 * 60 * 60 * 1_000_000_000;
+    let now = Time.now();
+    let cutoff : Int = now - sevenDaysNs;
 
-  public query ({ caller }) func getMyBookmarkedPosts() : async [ChannelPost] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized");
-    };
-    switch (channelPostBookmarks.get(caller)) {
-      case (null) { [] };
-      case (?s) {
-        s.toArray().filterMap(func(postId) { channelPosts.get(postId) });
-      };
-    };
-  };
-
-  // ============================================================
-  // Story Viewer Count Endpoints
-  // ============================================================
-
-  public shared ({ caller }) func recordStatusView(statusId : StatusId) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized");
-    };
-    // Do not record the author viewing their own story
-    switch (statuses.get(statusId)) {
-      case (null) { return };
-      case (?status) {
-        if (status.author == caller) { return };
-      };
-    };
-    let viewers = switch (statusViewers.get(statusId)) {
-      case (null) {
-        let s = Set.empty<UserId>();
-        s;
-      };
-      case (?s) { s };
-    };
-    viewers.add(caller);
-    statusViewers.add(statusId, viewers);
-  };
-
-  public query ({ caller }) func getStatusViewCount(statusId : StatusId) : async Nat {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized");
-    };
-    switch (statusViewers.get(statusId)) {
-      case (null) { 0 };
-      case (?s) { s.size() };
-    };
-  };
-
-  // ============================================================
-  // Analytics Endpoint
-  // ============================================================
-
-  public query ({ caller }) func getAnalytics() : async AnalyticsResult {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized");
-    };
+    // totalUsers
     let totalUsers = users.size();
-    let totalMessages = conversations.values().toArray().foldLeft(
-      0 : Nat,
-      func(acc, conv) { acc + conv.messages.size() }
-    );
-    let totalGoldVolume = goldTransactions.values().toArray().foldLeft(
-      0.0 : Float,
-      func(acc, txList) {
-        txList.toArray().foldLeft(acc, func(a, tx) {
-          a + tx.amount.toFloat();
-        });
-      }
-    );
-    // Active users: principals who sent at least 1 message in the last 7 days
-    let sevenDaysNs : Int = 7 * 24 * 3600 * 1_000_000_000;
-    let cutoff : Int = Time.now() - sevenDaysNs;
-    let activeSet = Set.empty<UserId>();
-    for (conv in conversations.values()) {
-      for (msg in conv.messages.vals()) {
-        if (msg.timestamp > cutoff) {
-          activeSet.add(msg.sender);
-        };
+
+    // totalMessagesSent — sum message counts across all conversations
+    var totalMessages : Nat = 0;
+    for ((_, conv) in conversations.entries()) {
+      totalMessages += conv.messages.size();
+    };
+
+    // totalGoldVolume — sum all raw balances
+    var totalGold : Nat = 0;
+    for ((_, bal) in goldBalances.entries()) {
+      totalGold += bal;
+    };
+
+    // activeUsers — users whose lastSeen > cutoff
+    var active : Nat = 0;
+    for ((_, profile) in users.entries()) {
+      if (profile.lastSeen >= cutoff) {
+        active += 1;
       };
     };
-    let activeUsers = activeSet.size();
+
+    // channelsCreated
     let channelsCreated = channels.size();
+
+    // storiesPosted
     let storiesPosted = statuses.size();
-    { totalUsers; totalMessages; totalGoldVolume; activeUsers; channelsCreated; storiesPosted };
-  };
 
-  // ============================================================
-  // Channel Post View Count Endpoints
-  // ============================================================
-
-  public shared ({ caller }) func recordChannelPostView(postId : ChannelPostId) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized");
+    #ok {
+      totalUsers;
+      totalMessagesSent = totalMessages;
+      totalGoldVolume   = totalGold;
+      activeUsers       = active;
+      channelsCreated;
+      storiesPosted;
     };
-    // Do not record the author viewing their own post
-    switch (channelPosts.get(postId)) {
-      case (null) { return };
-      case (?post) {
-        if (post.author == caller) { return };
-      };
-    };
-    let viewers = switch (channelPostViewers.get(postId)) {
-      case (null) { Set.empty<UserId>() };
-      case (?s) { s };
-    };
-    viewers.add(caller);
-    channelPostViewers.add(postId, viewers);
-  };
-
-  public query ({ caller }) func getChannelPostViewCount(postId : ChannelPostId) : async Nat {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized");
-    };
-    switch (channelPostViewers.get(postId)) {
-      case (null) { 0 };
-      case (?s) { s.size() };
-    };
-  };
-
-  // ============================================================
-  // Highlights Endpoints
-  // ============================================================
-
-  public shared ({ caller }) func saveHighlight(statusId : StatusId) : async { #ok; #err : Text } {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      return #err("Unauthorized");
-    };
-    // Only the story author can save it as a highlight
-    switch (statuses.get(statusId)) {
-      case (null) { return #err("Story not found") };
-      case (?status) {
-        if (status.author != caller) { return #err("You can only highlight your own stories") };
-      };
-    };
-    let lst = switch (highlights.get(caller)) {
-      case (null) { List.empty<StatusId>() };
-      case (?l) { l };
-    };
-    // Max 20 highlights per user
-    if (lst.size() >= 20) { return #err("Maximum 20 highlights allowed") };
-    // Avoid duplicates
-    if (lst.toArray().findIndex(func(id) { id == statusId }) != null) {
-      return #ok;
-    };
-    lst.add(statusId);
-    highlights.add(caller, lst);
-    #ok;
-  };
-
-  public shared ({ caller }) func removeHighlight(statusId : StatusId) : async { #ok; #err : Text } {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      return #err("Unauthorized");
-    };
-    switch (highlights.get(caller)) {
-      case (null) { return #err("Highlight not found") };
-      case (?lst) {
-        let filtered = lst.filter(func(id) { id != statusId });
-        highlights.add(caller, filtered);
-      };
-    };
-    #ok;
-  };
-
-  public query ({ caller }) func getMyHighlights() : async [StatusId] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized");
-    };
-    switch (highlights.get(caller)) {
-      case (null) { [] };
-      case (?lst) { lst.toArray() };
-    };
-  };
-
-  public query ({ caller }) func getUserHighlights(userId : UserId) : async [StatusId] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized");
-    };
-    switch (highlights.get(userId)) {
-      case (null) { [] };
-      case (?lst) { lst.toArray() };
-    };
-  };
-
-  // Returns full Status objects for a user's highlights — bypasses 72-hour expiry
-  public query ({ caller }) func getHighlightedStatuses(userId : UserId) : async [Status] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized");
-    };
-    let highlightIds = switch (highlights.get(userId)) {
-      case (null) { return [] };
-      case (?lst) { lst.toArray() };
-    };
-    highlightIds.filterMap(func(statusId) { statuses.get(statusId) });
   };
 };

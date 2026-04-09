@@ -169,21 +169,7 @@ actor {
                         Set__532252804<UserId__313180070>>;
       var size : Nat__490723111
     };
-  stable channelPostBookmarks :
-    {
-      var root :
-        Node__46230540<UserId__313180070,
-                        Set__532252804<ChannelPostId__748044666>>;
-      var size : Nat__490723111
-    };
   stable channelPostLikes :
-    {
-      var root :
-        Node__46230540<ChannelPostId__748044666,
-                        Set__532252804<UserId__313180070>>;
-      var size : Nat__490723111
-    };
-  stable channelPostViewers :
     {
       var root :
         Node__46230540<ChannelPostId__748044666,
@@ -230,12 +216,6 @@ actor {
       var root : Node__46230540<ConversationId__59272760, UserId__313180070>;
       var size : Nat__490723111
     };
-  stable highlights :
-    {
-      var root :
-        Node__46230540<UserId__313180070, List__415060402<StatusId__33433321>>;
-      var size : Nat__490723111
-    };
   stable var nextChannelCommentId : Nat;
   stable var nextChannelId : Nat;
   stable var nextChannelPostId : Nat;
@@ -259,12 +239,6 @@ actor {
       var size : Nat__490723111
     };
   stable statusLikes :
-    {
-      var root :
-        Node__46230540<StatusId__33433321, Set__532252804<UserId__313180070>>;
-      var size : Nat__490723111
-    };
-  stable statusViewers :
     {
       var root :
         Node__46230540<StatusId__33433321, Set__532252804<UserId__313180070>>;

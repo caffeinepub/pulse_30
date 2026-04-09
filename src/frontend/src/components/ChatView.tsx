@@ -349,6 +349,44 @@ function MemberRow({
   );
 }
 
+// Calls onSortKey with the member's display name for alphabetical sorting in parent
+function MemberRowWithSortKey({
+  memberId,
+  isMe,
+  isOwner,
+  index,
+  onSortKey,
+  onRemove,
+}: {
+  memberId: string;
+  isMe: boolean;
+  isOwner: boolean;
+  index: number;
+  onSortKey: (key: string) => void;
+  onRemove: () => void;
+}) {
+  const { data: profile } = useGetUserProfile(memberId);
+  const sortKey = (
+    profile?.displayName ||
+    profile?.username ||
+    memberId
+  ).toLowerCase();
+
+  useEffect(() => {
+    onSortKey(sortKey);
+  }, [sortKey, onSortKey]);
+
+  return (
+    <MemberRow
+      memberId={memberId}
+      isMe={isMe}
+      isOwner={isOwner}
+      index={index}
+      onRemove={onRemove}
+    />
+  );
+}
+
 interface MessageBubbleProps {
   message: Message;
   currentUserId: string;
@@ -756,6 +794,10 @@ export default function ChatView({
   } | null>(null);
   const [visibleMsgCount, setVisibleMsgCount] = useState(19);
   const [visibleMembersCount, setVisibleMembersCount] = useState(19);
+  // memberSortKeys: principal string -> sort key (displayName lowercased), populated as profiles load
+  const [memberSortKeys, setMemberSortKeys] = useState<Record<string, string>>(
+    {},
+  );
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -823,6 +865,16 @@ export default function ChatView({
         .find((m) => m.toString() !== currentUserId)
         ?.toString() ?? null)
     : null;
+
+  // Sorted member IDs for Edit Group dialog (alphabetical by display name, updated as profiles load)
+  const sortedMemberIds = useMemo(() => {
+    const ids = (conversation?.members ?? []).map((m) => m.toString());
+    return [...ids].sort((a, b) => {
+      const ka = memberSortKeys[a] ?? a.toLowerCase();
+      const kb = memberSortKeys[b] ?? b.toLowerCase();
+      return ka.localeCompare(kb);
+    });
+  }, [conversation, memberSortKeys]);
 
   const { data: otherProfile } = useGetUserProfile(otherUserId);
   const { data: isOnline } = useIsUserOnline(otherUserId);
@@ -1264,7 +1316,15 @@ export default function ChatView({
             if (!v) setGroupAvatarPreview(null);
           }}
         >
-          <DialogContent className="bg-card border-border overflow-y-auto max-h-[90dvh] pb-safe">
+          <DialogContent
+            className="bg-card border-border w-full max-w-md"
+            style={{
+              maxHeight: "90dvh",
+              overflowY: "auto",
+              overscrollBehavior: "contain",
+              paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+            }}
+          >
             <DialogHeader>
               <DialogTitle>Edit Group</DialogTitle>
             </DialogHeader>
@@ -1394,34 +1454,37 @@ export default function ChatView({
                     </span>
                   </div>
 
-                  {/* Current members */}
+                  {/* Current members — sorted alphabetically */}
                   <ScrollArea className="max-h-48">
                     <div className="flex flex-col gap-1">
-                      {(conversation?.members ?? [])
+                      {sortedMemberIds
                         .slice(0, visibleMembersCount)
-                        .map((memberId, mi) => {
-                          const mIdStr = memberId.toString();
-                          const isMe = mIdStr === currentUserId;
-                          return (
-                            <MemberRow
-                              key={mIdStr}
-                              memberId={mIdStr}
-                              isMe={isMe}
-                              isOwner={mIdStr === groupOwnerId}
-                              index={mi}
-                              onRemove={() => {
-                                if (!conversationId) return;
-                                removeGroupMember.mutate(
-                                  { conversationId, memberId: mIdStr },
-                                  {
-                                    onError: () =>
-                                      toast.error("Failed to remove member"),
-                                  },
-                                );
-                              }}
-                            />
-                          );
-                        })}
+                        .map((mIdStr, mi) => (
+                          <MemberRowWithSortKey
+                            key={mIdStr}
+                            memberId={mIdStr}
+                            isMe={mIdStr === currentUserId}
+                            isOwner={mIdStr === groupOwnerId}
+                            index={mi}
+                            onSortKey={(key) =>
+                              setMemberSortKeys((prev) =>
+                                prev[mIdStr] === key
+                                  ? prev
+                                  : { ...prev, [mIdStr]: key },
+                              )
+                            }
+                            onRemove={() => {
+                              if (!conversationId) return;
+                              removeGroupMember.mutate(
+                                { conversationId, memberId: mIdStr },
+                                {
+                                  onError: () =>
+                                    toast.error("Failed to remove member"),
+                                },
+                              );
+                            }}
+                          />
+                        ))}
                     </div>
                   </ScrollArea>
                   {(conversation?.members ?? []).length >

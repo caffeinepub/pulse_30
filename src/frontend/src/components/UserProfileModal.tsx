@@ -7,45 +7,31 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import {
-  Bookmark,
   Check,
   Copy,
   Loader2,
   MessageCircle,
-  Play,
   QrCode,
   Radio,
   Share2,
   Shield,
   ShieldOff,
-  Star,
-  StarOff,
   Users,
   X,
 } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
-import type { Status, UserProfile } from "../backend";
 import {
   useBlockUser,
   useFollowChannel,
   useGetAllChannels,
-  useGetHighlightedStatuses,
   useGetMyBlockedUsers,
-  useGetMyBookmarkedPosts,
-  useGetMyHighlights,
-  useGetMyStatuses,
-  useGetStatusInteractions,
   useGetUserProfile,
   useIsUserOnline,
-  useRemoveHighlight,
-  useSaveHighlight,
   useUnblockUser,
   useUnfollowChannel,
 } from "../hooks/useQueries";
 import type { ChannelId } from "../hooks/useQueries";
-import ChannelPostCard from "./ChannelPostCard";
 
 function getInitials(name: string) {
   return name
@@ -170,134 +156,6 @@ interface UserProfileModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onStartChat: (userId: string) => void;
-  currentUserId?: string;
-}
-
-/** Inline story viewer for highlighted stories — full-screen overlay */
-function HighlightViewer({
-  statuses,
-  initialIndex,
-  onClose,
-}: {
-  statuses: Status[];
-  initialIndex: number;
-  onClose: () => void;
-}) {
-  const [index, setIndex] = useState(initialIndex);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const status = statuses[index];
-  const { data: interactions } = useGetStatusInteractions(status?.id ?? null);
-
-  if (!status) return null;
-  const mediaKind = status.content.mediaType?.__kind__;
-  const isVideo = mediaKind === "video";
-
-  const goNext = () => {
-    if (index < statuses.length - 1) setIndex(index + 1);
-    else onClose();
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[60] flex flex-col"
-      style={{ background: "oklch(0.05 0.005 55)" }}
-    >
-      {/* Progress bars */}
-      <div className="flex gap-1 px-4 pt-3 pb-1">
-        {statuses.map((_, i) => (
-          <div
-            // biome-ignore lint/suspicious/noArrayIndexKey: index is stable
-            key={i}
-            className="flex-1 h-0.5 rounded-full"
-            style={{
-              background:
-                i <= index ? "oklch(0.82 0.15 72)" : "oklch(0.4 0.005 55)",
-            }}
-          />
-        ))}
-      </div>
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-2">
-        <div className="flex-1">
-          <p className="text-xs" style={{ color: "oklch(0.65 0.05 72)" }}>
-            Highlight {index + 1} of {statuses.length}
-          </p>
-        </div>
-        <p className="text-xs text-white/50">
-          {Number(interactions?.likeCount ?? 0)} likes
-        </p>
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={onClose}
-          className="h-9 w-9 rounded-full text-white hover:bg-white/10"
-        >
-          <X className="h-5 w-5" />
-        </Button>
-      </div>
-      {/* Content */}
-      <div className="flex-1 relative flex flex-col items-center justify-center overflow-hidden">
-        {index > 0 && (
-          <button
-            type="button"
-            className="absolute left-0 top-0 w-1/4 h-full z-10"
-            onClick={() => setIndex(index - 1)}
-            aria-label="Previous"
-          />
-        )}
-        <button
-          type="button"
-          className="absolute right-0 top-0 w-1/4 h-full z-10"
-          onClick={goNext}
-          aria-label="Next"
-        />
-        {status.content.mediaUrl && mediaKind === "image" && (
-          <img
-            src={status.content.mediaUrl}
-            alt="Highlight"
-            className="max-w-full max-h-[70vh] object-contain rounded-xl relative z-20"
-          />
-        )}
-        {status.content.mediaUrl && isVideo && (
-          // biome-ignore lint/a11y/useMediaCaption: user-uploaded content
-          <video
-            ref={videoRef}
-            key={String(status.id)}
-            src={status.content.mediaUrl}
-            autoPlay
-            muted
-            loop
-            playsInline
-            controls
-            className="max-w-full max-h-[70vh] object-contain rounded-xl relative z-20"
-          />
-        )}
-        {status.content.text && (
-          <div
-            className="px-8 py-6 rounded-2xl text-center text-white text-xl font-semibold max-w-sm relative z-20"
-            style={{
-              background: status.content.mediaUrl
-                ? "oklch(0.0 0 0 / 0.5)"
-                : "linear-gradient(135deg, oklch(0.25 0.04 72), oklch(0.18 0.03 65))",
-            }}
-          >
-            {status.content.text}
-          </div>
-        )}
-        {!isVideo && (
-          <button
-            type="button"
-            className="absolute inset-0 z-0"
-            onClick={goNext}
-            aria-label="Next"
-          />
-        )}
-      </div>
-    </motion.div>
-  );
 }
 
 export default function UserProfileModal({
@@ -305,7 +163,6 @@ export default function UserProfileModal({
   open,
   onOpenChange,
   onStartChat,
-  currentUserId,
 }: UserProfileModalProps) {
   const { data: profile, isLoading } = useGetUserProfile(userId);
   const { data: isOnline } = useIsUserOnline(userId);
@@ -318,26 +175,6 @@ export default function UserProfileModal({
     : false;
   const [copied, setCopied] = useState(false);
   const [showQr, setShowQr] = useState(false);
-
-  // Highlight viewer state
-  const [highlightViewerIndex, setHighlightViewerIndex] = useState<
-    number | null
-  >(null);
-
-  // Is the viewer looking at their own profile?
-  const isOwnProfile = !!userId && !!currentUserId && userId === currentUserId;
-
-  // Bookmarked posts — only fetched when viewing own profile
-  const { data: bookmarkedPosts = [] } = useGetMyBookmarkedPosts();
-
-  // Highlights — fetch for the profile being viewed
-  const { data: highlightedStatuses = [] } = useGetHighlightedStatuses(userId);
-  // Own highlight IDs (to show save/remove button on own stories)
-  const { data: myHighlightIds = [] } = useGetMyHighlights();
-  // Own stories (for save-as-highlight on own profile)
-  const { data: myStatuses = [] } = useGetMyStatuses();
-  const saveHighlight = useSaveHighlight();
-  const removeHighlight = useRemoveHighlight();
 
   // Channels owned by this user
   const userChannels = userId
@@ -581,282 +418,6 @@ export default function UserProfileModal({
                 </div>
               )}
 
-              {/* Highlights section — visible to all profile visitors */}
-              {(highlightedStatuses.length > 0 || isOwnProfile) && (
-                <div className="w-full" data-ocid="profile.highlights.section">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Star
-                      className="h-3.5 w-3.5"
-                      style={{ color: "oklch(0.82 0.15 72 / 0.7)" }}
-                    />
-                    <span
-                      className="text-xs font-semibold uppercase tracking-wider"
-                      style={{ color: "oklch(0.82 0.15 72 / 0.7)" }}
-                    >
-                      Highlights
-                    </span>
-                    {isOwnProfile && highlightedStatuses.length > 0 && (
-                      <span
-                        className="text-xs ml-auto"
-                        style={{ color: "oklch(0.5 0.03 55)" }}
-                      >
-                        {highlightedStatuses.length}
-                      </span>
-                    )}
-                  </div>
-
-                  {highlightedStatuses.length === 0 && isOwnProfile ? (
-                    <div
-                      className="rounded-xl py-5 flex flex-col items-center justify-center text-center"
-                      style={{
-                        background: "oklch(0.12 0.005 55)",
-                        border: "1px dashed oklch(0.82 0.15 72 / 0.15)",
-                      }}
-                      data-ocid="profile.highlights.empty_state"
-                    >
-                      <Star
-                        className="h-5 w-5 mb-1.5 opacity-30"
-                        style={{ color: "oklch(0.82 0.15 72)" }}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        No highlights yet
-                      </p>
-                      <p className="text-[11px] text-muted-foreground/60 mt-0.5">
-                        Save your stories to keep them permanently
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
-                      {highlightedStatuses.map((status, idx) => {
-                        const isHighlighted = myHighlightIds.some(
-                          (id) => id.toString() === status.id.toString(),
-                        );
-                        const mediaKind = status.content.mediaType?.__kind__;
-                        return (
-                          <div
-                            key={status.id.toString()}
-                            className="relative shrink-0 group"
-                          >
-                            <button
-                              type="button"
-                              data-ocid={`profile.highlights.item.${idx + 1}`}
-                              onClick={() => setHighlightViewerIndex(idx)}
-                              className="w-16 h-16 rounded-xl overflow-hidden border-2 flex items-center justify-center relative"
-                              style={{
-                                borderColor: "oklch(0.82 0.15 72 / 0.5)",
-                                background: "oklch(0.12 0.005 55)",
-                              }}
-                            >
-                              {status.content.mediaUrl &&
-                              mediaKind === "image" ? (
-                                <img
-                                  src={status.content.mediaUrl}
-                                  alt="Highlight"
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : status.content.mediaUrl &&
-                                mediaKind === "video" ? (
-                                <div className="w-full h-full flex items-center justify-center bg-black/50">
-                                  <Play
-                                    className="h-5 w-5 text-white"
-                                    fill="white"
-                                  />
-                                </div>
-                              ) : (
-                                <Star
-                                  className="h-6 w-6 opacity-40"
-                                  style={{ color: "oklch(0.82 0.15 72)" }}
-                                />
-                              )}
-                              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                <Play
-                                  className="h-4 w-4 text-white"
-                                  fill="white"
-                                />
-                              </div>
-                            </button>
-                            {/* Remove highlight button on own profile */}
-                            {isOwnProfile && isHighlighted && (
-                              <button
-                                type="button"
-                                data-ocid={`profile.highlights.remove.${idx + 1}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  removeHighlight.mutate(status.id, {
-                                    onSuccess: () =>
-                                      toast.success("Removed from highlights"),
-                                    onError: () =>
-                                      toast.error("Failed to remove highlight"),
-                                  });
-                                }}
-                                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full flex items-center justify-center z-10 opacity-0 group-hover:opacity-100 transition-opacity"
-                                style={{ background: "oklch(0.35 0.15 25)" }}
-                                aria-label="Remove highlight"
-                              >
-                                <X className="h-2.5 w-2.5 text-white" />
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Save stories as highlights — own profile only */}
-                  {isOwnProfile && myStatuses.length > 0 && (
-                    <div className="mt-2">
-                      <p
-                        className="text-[11px] mb-1.5"
-                        style={{ color: "oklch(0.5 0.03 55)" }}
-                      >
-                        Save stories as highlights:
-                      </p>
-                      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
-                        {myStatuses.map((status, idx) => {
-                          const isAlreadyHighlighted = myHighlightIds.some(
-                            (id) => id.toString() === status.id.toString(),
-                          );
-                          const mediaKind = status.content.mediaType?.__kind__;
-                          return (
-                            <div
-                              key={status.id.toString()}
-                              className="shrink-0 relative"
-                            >
-                              <button
-                                type="button"
-                                data-ocid={`profile.highlights.save.${idx + 1}`}
-                                disabled={
-                                  isAlreadyHighlighted ||
-                                  saveHighlight.isPending
-                                }
-                                onClick={() => {
-                                  if (isAlreadyHighlighted) return;
-                                  saveHighlight.mutate(status.id, {
-                                    onSuccess: () =>
-                                      toast.success("Saved to highlights!"),
-                                    onError: () =>
-                                      toast.error("Failed to save highlight"),
-                                  });
-                                }}
-                                className="w-12 h-12 rounded-lg overflow-hidden border-2 flex items-center justify-center relative opacity-100 disabled:opacity-50"
-                                style={{
-                                  borderColor: isAlreadyHighlighted
-                                    ? "oklch(0.82 0.15 72)"
-                                    : "oklch(0.3 0.01 55)",
-                                  background: "oklch(0.12 0.005 55)",
-                                }}
-                              >
-                                {status.content.mediaUrl &&
-                                mediaKind === "image" ? (
-                                  <img
-                                    src={status.content.mediaUrl}
-                                    alt="Story"
-                                    className="w-full h-full object-cover"
-                                  />
-                                ) : status.content.mediaUrl &&
-                                  mediaKind === "video" ? (
-                                  <Play
-                                    className="h-4 w-4"
-                                    style={{ color: "oklch(0.82 0.15 72)" }}
-                                  />
-                                ) : (
-                                  <Star
-                                    className="h-4 w-4 opacity-40"
-                                    style={{ color: "oklch(0.82 0.15 72)" }}
-                                  />
-                                )}
-                                {isAlreadyHighlighted && (
-                                  <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                                    <StarOff className="h-3.5 w-3.5 text-white" />
-                                  </div>
-                                )}
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Bookmarks section — only shown on own profile */}
-              {isOwnProfile && (
-                <div className="w-full" data-ocid="profile.bookmarks.section">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Bookmark
-                      className="h-3.5 w-3.5"
-                      style={{ color: "oklch(0.82 0.15 72 / 0.7)" }}
-                    />
-                    <span
-                      className="text-xs font-semibold uppercase tracking-wider"
-                      style={{ color: "oklch(0.82 0.15 72 / 0.7)" }}
-                    >
-                      Bookmarks
-                    </span>
-                    <span
-                      className="text-xs ml-auto"
-                      style={{ color: "oklch(0.5 0.03 55)" }}
-                    >
-                      {bookmarkedPosts.length}
-                    </span>
-                  </div>
-                  {bookmarkedPosts.length === 0 ? (
-                    <div
-                      className="rounded-xl py-6 flex flex-col items-center justify-center text-center"
-                      style={{
-                        background: "oklch(0.12 0.005 55)",
-                        border: "1px dashed oklch(0.82 0.15 72 / 0.15)",
-                      }}
-                      data-ocid="profile.bookmarks.empty_state"
-                    >
-                      <Bookmark
-                        className="h-6 w-6 mb-2 opacity-30"
-                        style={{ color: "oklch(0.82 0.15 72)" }}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        No bookmarks yet
-                      </p>
-                      <p className="text-[11px] text-muted-foreground/60 mt-0.5">
-                        Tap the bookmark icon on any channel post
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-3">
-                      {bookmarkedPosts.map((post, idx) => {
-                        const channelMeta = allChannels.find(
-                          (m) =>
-                            m.channel.id.toString() ===
-                            post.channelId.toString(),
-                        );
-                        const resolvedAuthorName =
-                          channelMeta?.ownerProfile.displayName ??
-                          channelMeta?.ownerProfile.username ??
-                          "Unknown";
-                        const resolvedAuthorAvatar =
-                          channelMeta?.ownerProfile.avatarUrl ?? undefined;
-                        return (
-                          <ChannelPostCard
-                            key={post.id.toString()}
-                            post={post}
-                            authorName={resolvedAuthorName}
-                            authorAvatar={resolvedAuthorAvatar}
-                            isOwner={false}
-                            isPostAuthor={
-                              post.author.toText() === currentUserId
-                            }
-                            currentUserId={currentUserId ?? ""}
-                            channelId={post.channelId}
-                            index={idx}
-                            isBookmarked={true}
-                          />
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* Profile link section */}
               {profileUrl && (
                 <div className="w-full">
@@ -957,17 +518,6 @@ export default function UserProfileModal({
           )}
         </div>
       </SheetContent>
-
-      {/* Highlight story viewer — full-screen overlay */}
-      <AnimatePresence>
-        {highlightViewerIndex !== null && highlightedStatuses.length > 0 && (
-          <HighlightViewer
-            statuses={highlightedStatuses}
-            initialIndex={highlightViewerIndex}
-            onClose={() => setHighlightViewerIndex(null)}
-          />
-        )}
-      </AnimatePresence>
     </Sheet>
   );
 }

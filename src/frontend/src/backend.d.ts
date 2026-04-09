@@ -19,14 +19,6 @@ export interface ChannelPostInteractions {
     comments: Array<ChannelCommentWithProfile>;
     likedByMe: boolean;
 }
-export interface AnalyticsResult {
-    activeUsers: bigint;
-    channelsCreated: bigint;
-    totalMessages: bigint;
-    totalGoldVolume: number;
-    storiesPosted: bigint;
-    totalUsers: bigint;
-}
 export interface MessageContent {
     text: string;
     mediaUrl?: string;
@@ -45,6 +37,14 @@ export interface ChannelCommentWithProfile {
     text: string;
     author: UserProfile;
     timestamp: Timestamp;
+}
+export interface AnalyticsRecord {
+    activeUsers: bigint;
+    channelsCreated: bigint;
+    totalMessagesSent: bigint;
+    totalGoldVolume: bigint;
+    storiesPosted: bigint;
+    totalUsers: bigint;
 }
 export type ChannelPostId = bigint;
 export interface ChannelPostContent {
@@ -217,13 +217,6 @@ export interface backendInterface {
     adminClaimGold(amount: bigint): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     blockUser(targetUserId: UserId): Promise<void>;
-    bookmarkPost(postId: ChannelPostId): Promise<{
-        __kind__: "ok";
-        ok: null;
-    } | {
-        __kind__: "err";
-        err: string;
-    }>;
     commentOnChannelPost(postId: ChannelPostId, text: string): Promise<ChannelCommentId>;
     commentOnStatus(statusId: StatusId, text: string): Promise<CommentId>;
     createChannel(name: string, description: string, avatarUrl: string | null): Promise<ChannelId>;
@@ -240,35 +233,35 @@ export interface backendInterface {
     getAdminTotalClaimed(): Promise<bigint>;
     getAllChannels(): Promise<Array<ChannelWithMeta>>;
     getAllStories(): Promise<Array<[UserProfile, Array<Status>]>>;
-    getAnalytics(): Promise<AnalyticsResult>;
+    getAnalytics(): Promise<{
+        __kind__: "ok";
+        ok: AnalyticsRecord;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getChannel(channelId: ChannelId): Promise<ChannelWithMeta | null>;
     getChannelPostInteractions(postId: ChannelPostId): Promise<ChannelPostInteractions>;
-    getChannelPostViewCount(postId: ChannelPostId): Promise<bigint>;
     getChannelPosts(channelId: ChannelId): Promise<Array<ChannelPost>>;
     getContactStatuses(): Promise<Array<[UserProfile, Array<Status>]>>;
     getConversation(conversationId: ConversationId): Promise<Conversation | null>;
     getGroupAvatars(): Promise<Array<[ConversationId, string]>>;
     getGroupCreators(): Promise<Array<[ConversationId, UserId]>>;
-    getHighlightedStatuses(userId: UserId): Promise<Array<Status>>;
     getMessageReadReceipts(conversationId: ConversationId, messageId: MessageId): Promise<Array<MessageReadReceipt> | null>;
     getMessages(conversationId: ConversationId, offset: bigint, limit: bigint): Promise<Array<Message>>;
     getMyBlockedUsers(): Promise<Array<UserProfile>>;
-    getMyBookmarkedPosts(): Promise<Array<ChannelPost>>;
     getMyConversations(): Promise<Array<Conversation>>;
     getMyGoldBalance(): Promise<bigint>;
     getMyGoldTransactions(): Promise<Array<GoldTransaction>>;
-    getMyHighlights(): Promise<Array<StatusId>>;
     getMyNotifications(): Promise<Array<AppNotification>>;
     getMyStatuses(): Promise<Array<Status>>;
     getMyTransactionHistory(): Promise<Array<GoldTransaction>>;
     getPaginatedMessages(conversationId: ConversationId, offset: bigint, limit: bigint): Promise<Array<Message>>;
     getStatusInteractions(statusId: StatusId): Promise<StatusInteractions>;
-    getStatusViewCount(statusId: StatusId): Promise<bigint>;
     getUnreadCount(conversationId: ConversationId): Promise<bigint>;
     getUserByPrincipal(userId: UserId): Promise<UserProfile | null>;
-    getUserHighlights(userId: UserId): Promise<Array<StatusId>>;
     getUserProfile(userId: UserId): Promise<UserProfile | null>;
     getUsersWithGoldAbove(threshold: bigint): Promise<Array<DealerInfo>>;
     isBlockedBy(targetUserId: UserId): Promise<boolean>;
@@ -281,26 +274,10 @@ export interface backendInterface {
     markAsRead(conversationId: ConversationId): Promise<void>;
     markMessagesAsRead(conversationId: ConversationId): Promise<void>;
     markNotificationsRead(): Promise<void>;
-    recordChannelPostView(postId: ChannelPostId): Promise<void>;
-    recordStatusView(statusId: StatusId): Promise<void>;
     removeGroupMember(conversationId: ConversationId, memberId: UserId): Promise<void>;
-    removeHighlight(statusId: StatusId): Promise<{
-        __kind__: "ok";
-        ok: null;
-    } | {
-        __kind__: "err";
-        err: string;
-    }>;
     requestBuyGold(amount: bigint): Promise<void>;
     requestSellGold(amount: bigint): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
-    saveHighlight(statusId: StatusId): Promise<{
-        __kind__: "ok";
-        ok: null;
-    } | {
-        __kind__: "err";
-        err: string;
-    }>;
     searchUserByUsername(username: string): Promise<{
         userId: UserId;
         profile: UserProfile;
@@ -312,13 +289,6 @@ export interface backendInterface {
     sendMessage(conversationId: ConversationId, messageInput: MessageInput): Promise<MessageId>;
     transferGold(toUsername: string, amount: bigint): Promise<void>;
     unblockUser(targetUserId: UserId): Promise<void>;
-    unbookmarkPost(postId: ChannelPostId): Promise<{
-        __kind__: "ok";
-        ok: null;
-    } | {
-        __kind__: "err";
-        err: string;
-    }>;
     unfollowChannel(channelId: ChannelId): Promise<void>;
     unlikeChannelPost(postId: ChannelPostId): Promise<void>;
     unlikeStatus(statusId: StatusId): Promise<void>;

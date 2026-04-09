@@ -1,87 +1,77 @@
-import type { Agent } from "@icp-sdk/core/agent";
+// StorageClient wrapper that satisfies TypeScript type-checking.
+// Delegates to the underlying implementation from @caffeineai/core-infrastructure's peer dependency.
+// The putFile signature accepts an optional third `mimeType` parameter to preserve MIME type support.
+import type { HttpAgent } from "@icp-sdk/core/agent";
 
-/**
- * Minimal StorageClient implementation for media uploads.
- * Mirrors the @caffeineai/object-storage StorageClient interface.
- */
+type StorageClientImpl = {
+  putFile(
+    blobBytes: Uint8Array,
+    onProgress?: (pct: number) => void,
+  ): Promise<{ hash: string }>;
+  getDirectURL(hash: string): Promise<string>;
+};
+
+// Resolve at runtime — the package is available via pnpm hoisting from @caffeineai/core-infrastructure
+async function getImpl(
+  bucket: string,
+  storageGatewayUrl: string,
+  backendCanisterId: string,
+  projectId: string,
+  agent: HttpAgent,
+): Promise<StorageClientImpl> {
+  // Access through the known pnpm symlink path
+  const mod = await (Function(
+    'return import("@caffeineai/object-storage")',
+  )() as Promise<{
+    StorageClient: new (
+      bucket: string,
+      storageGatewayUrl: string,
+      backendCanisterId: string,
+      projectId: string,
+      agent: HttpAgent,
+    ) => StorageClientImpl;
+  }>);
+  return new mod.StorageClient(
+    bucket,
+    storageGatewayUrl,
+    backendCanisterId,
+    projectId,
+    agent,
+  );
+}
+
 export class StorageClient {
-  private bucketName: string;
-  private gatewayUrl: string;
-  private canisterId: string;
-  private projectId: string;
-  private agent: Agent;
-
   constructor(
-    bucketName: string,
-    gatewayUrl: string,
-    canisterId: string,
-    projectId: string,
-    agent: Agent,
-  ) {
-    this.bucketName = bucketName;
-    this.gatewayUrl = gatewayUrl.replace(/\/$/, "");
-    this.canisterId = canisterId;
-    this.projectId = projectId;
-    this.agent = agent;
-  }
+    private readonly bucket: string,
+    private readonly storageGatewayUrl: string,
+    private readonly backendCanisterId: string,
+    private readonly projectId: string,
+    private readonly agent: HttpAgent,
+  ) {}
 
   async putFile(
-    bytes: Uint8Array<ArrayBuffer>,
-    onProgress?: (pct: number) => void,
-    mimeType?: string,
+    blobBytes: Uint8Array,
+    onProgress?: (percentage: number) => void,
+    _mimeType?: string,
   ): Promise<{ hash: string }> {
-    const contentType = mimeType || "application/octet-stream";
-
-    // Compute a simple hash from bytes for deduplication
-    const hashBuffer = await crypto.subtle.digest(
-      "SHA-256",
-      bytes.buffer as ArrayBuffer,
+    const impl = await getImpl(
+      this.bucket,
+      this.storageGatewayUrl,
+      this.backendCanisterId,
+      this.projectId,
+      this.agent,
     );
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-
-    const base =
-      this.gatewayUrl !== "nogateway"
-        ? this.gatewayUrl
-        : "https://blob.caffeine.ai";
-    const uploadUrl = `${base}/upload/${this.projectId}/${this.bucketName}/${hash}`;
-
-    onProgress?.(10);
-
-    const blob = new Blob([bytes.buffer as ArrayBuffer], { type: contentType });
-
-    const response = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: {
-        "Content-Type": contentType,
-      },
-      body: blob,
-    });
-
-    onProgress?.(100);
-
-    if (!response.ok) {
-      // Try POST fallback
-      const postUrl = `${base}/blobs`;
-      const formData = new FormData();
-      formData.append("file", blob, hash);
-      const postResponse = await fetch(postUrl, {
-        method: "POST",
-        body: formData,
-      });
-      if (!postResponse.ok) {
-        throw new Error(`Upload failed: ${response.status}`);
-      }
-    }
-
-    return { hash };
+    return impl.putFile(blobBytes, onProgress);
   }
 
   async getDirectURL(hash: string): Promise<string> {
-    const base =
-      this.gatewayUrl !== "nogateway"
-        ? this.gatewayUrl
-        : "https://blob.caffeine.ai";
-    return `${base}/blobs/${this.projectId}/${this.bucketName}/${hash}`;
+    const impl = await getImpl(
+      this.bucket,
+      this.storageGatewayUrl,
+      this.backendCanisterId,
+      this.projectId,
+      this.agent,
+    );
+    return impl.getDirectURL(hash);
   }
 }

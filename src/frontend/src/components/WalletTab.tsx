@@ -12,15 +12,13 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Activity,
   ArrowDownLeft,
   ArrowUpDown,
   ArrowUpRight,
-  BookOpen,
+  BarChart3,
   Coins,
   Loader2,
   MessageCircle,
-  Radio,
   ShieldCheck,
   Sparkles,
   TrendingDown,
@@ -28,7 +26,6 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import type React from "react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { GoldTransaction } from "../backend.d";
@@ -163,41 +160,6 @@ interface WalletTabProps {
   onOpenChat: (username: string) => void;
 }
 
-function AnalyticMetric({
-  icon,
-  label,
-  value,
-  sublabel,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  sublabel?: string;
-}) {
-  return (
-    <div
-      className="rounded-xl p-3 flex flex-col gap-1"
-      style={{ background: "oklch(0.12 0.01 55 / 0.6)" }}
-    >
-      <div className="flex items-center gap-1.5">
-        <span style={{ color: "oklch(0.82 0.15 72 / 0.7)" }}>{icon}</span>
-        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-          {label}
-        </span>
-      </div>
-      <p
-        className="text-base font-bold font-display leading-tight"
-        style={{ color: "oklch(0.90 0.05 55)" }}
-      >
-        {value}
-      </p>
-      {sublabel && (
-        <p className="text-[10px] text-muted-foreground/60">{sublabel}</p>
-      )}
-    </div>
-  );
-}
-
 function useIcpPrice() {
   const [price, setPrice] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -228,11 +190,11 @@ export default function WalletTab({
     useGetMyTransactionHistory();
   const { data: totalClaimed, isLoading: claimedLoading } =
     useGetAdminTotalClaimed();
+  const { data: analytics, isLoading: analyticsLoading } = useGetAnalytics();
   // 99 Gold = 9900 raw units (1 Gold = 100 raw)
   const { data: dealers, isLoading: dealersLoading } = useGetUsersWithGoldAbove(
     BigInt(9900),
   );
-  const { data: analytics, isLoading: analyticsLoading } = useGetAnalytics();
 
   const adminClaim = useAdminClaimGold();
   const requestBuy = useRequestBuyGold();
@@ -418,136 +380,163 @@ export default function WalletTab({
           {/* Admin Panel */}
           {isAdmin && (
             <div
-              className="mx-4 mb-4 rounded-xl overflow-hidden"
+              className="mx-4 mb-4 rounded-xl p-4"
               style={{
                 background: "oklch(0.15 0.02 280 / 0.6)",
                 border: "1px solid oklch(0.82 0.15 72 / 0.2)",
               }}
               data-ocid="wallet.admin.panel"
             >
-              {/* Analytics Card */}
-              <div className="p-4 border-b border-border/30">
-                <div className="flex items-center gap-2 mb-3">
-                  <Activity
-                    className="h-4 w-4"
-                    style={{ color: "oklch(0.82 0.15 72)" }}
-                  />
-                  <span
-                    className="text-sm font-semibold"
-                    style={{ color: "oklch(0.82 0.15 72)" }}
-                  >
-                    Analytics
-                  </span>
-                </div>
-                {analyticsLoading ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    {[1, 2, 3, 4, 5, 6].map((i) => (
-                      <Skeleton key={i} className="h-14 rounded-xl" />
-                    ))}
-                  </div>
-                ) : analytics ? (
-                  <div
-                    className="grid grid-cols-2 gap-2"
-                    data-ocid="wallet.analytics.grid"
-                  >
-                    <AnalyticMetric
-                      icon={<Users className="h-4 w-4" />}
-                      label="Total Users"
-                      value={analytics.totalUsers.toLocaleString()}
-                    />
-                    <AnalyticMetric
-                      icon={<MessageCircle className="h-4 w-4" />}
-                      label="Messages Sent"
-                      value={analytics.totalMessages.toLocaleString()}
-                    />
-                    <AnalyticMetric
-                      icon={<Coins className="h-4 w-4" />}
-                      label="Gold Volume"
-                      value={`${GOLD_SYMBOL} ${analytics.totalGoldVolume.toFixed(2)}`}
-                    />
-                    <AnalyticMetric
-                      icon={<Activity className="h-4 w-4" />}
-                      label="Active Users"
-                      value={analytics.activeUsers.toLocaleString()}
-                      sublabel="last 7 days"
-                    />
-                    <AnalyticMetric
-                      icon={<Radio className="h-4 w-4" />}
-                      label="Channels"
-                      value={analytics.channelsCreated.toLocaleString()}
-                    />
-                    <AnalyticMetric
-                      icon={<BookOpen className="h-4 w-4" />}
-                      label="Stories Posted"
-                      value={analytics.storiesPosted.toLocaleString()}
-                    />
-                  </div>
+              <div className="flex items-center gap-2 mb-3">
+                <ShieldCheck
+                  className="h-4 w-4"
+                  style={{ color: "oklch(0.82 0.15 72)" }}
+                />
+                <span
+                  className="text-sm font-semibold"
+                  style={{ color: "oklch(0.82 0.15 72)" }}
+                >
+                  Admin Panel
+                </span>
+              </div>
+              <div className="text-xs text-muted-foreground mb-1">
+                Total claimed:{" "}
+                {claimedLoading ? (
+                  "…"
                 ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Analytics unavailable
-                  </p>
+                  <span style={{ color: "oklch(0.82 0.15 72)" }}>
+                    {(Number(totalClaimed ?? 0) / 100).toLocaleString("en-US", {
+                      maximumFractionDigits: 2,
+                    })}{" "}
+                    / {MAX_SUPPLY_GOLD.toLocaleString()} Gold
+                  </span>
                 )}
               </div>
-
-              {/* Claim panel */}
-              <div className="p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <ShieldCheck
-                    className="h-4 w-4"
-                    style={{ color: "oklch(0.82 0.15 72)" }}
-                  />
-                  <span
-                    className="text-sm font-semibold"
-                    style={{ color: "oklch(0.82 0.15 72)" }}
-                  >
-                    Admin Panel
-                  </span>
-                </div>
-                <div className="text-xs text-muted-foreground mb-1">
-                  Total claimed:{" "}
-                  {claimedLoading ? (
-                    "…"
-                  ) : (
-                    <span style={{ color: "oklch(0.82 0.15 72)" }}>
-                      {(Number(totalClaimed ?? 0) / 100).toLocaleString(
-                        "en-US",
-                        {
-                          maximumFractionDigits: 2,
-                        },
-                      )}{" "}
-                      / {MAX_SUPPLY_GOLD.toLocaleString()} Gold
-                    </span>
-                  )}
-                </div>
-                {/* Progress bar */}
+              {/* Progress bar */}
+              <div
+                className="h-1.5 rounded-full overflow-hidden mb-3"
+                style={{ background: "oklch(0.25 0.02 55)" }}
+              >
                 <div
-                  className="h-1.5 rounded-full overflow-hidden mb-3"
-                  style={{ background: "oklch(0.25 0.02 55)" }}
-                >
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{
-                      width: `${claimedPct}%`,
-                      background:
-                        "linear-gradient(90deg, oklch(0.76 0.13 72), oklch(0.85 0.18 75))",
-                    }}
-                  />
-                </div>
-                <Button
-                  data-ocid="wallet.admin.claim.button"
-                  size="sm"
-                  className="w-full gap-2"
+                  className="h-full rounded-full transition-all"
                   style={{
+                    width: `${claimedPct}%`,
                     background:
-                      "linear-gradient(135deg, oklch(0.76 0.13 72), oklch(0.65 0.11 65))",
-                    color: "oklch(0.08 0.004 55)",
+                      "linear-gradient(90deg, oklch(0.76 0.13 72), oklch(0.85 0.18 75))",
                   }}
-                  onClick={() => setClaimOpen(true)}
-                >
-                  <Coins className="h-3.5 w-3.5" />
-                  Claim Gold
-                </Button>
+                />
               </div>
+              <Button
+                data-ocid="wallet.admin.claim.button"
+                size="sm"
+                className="w-full gap-2"
+                style={{
+                  background:
+                    "linear-gradient(135deg, oklch(0.76 0.13 72), oklch(0.65 0.11 65))",
+                  color: "oklch(0.08 0.004 55)",
+                }}
+                onClick={() => setClaimOpen(true)}
+              >
+                <Coins className="h-3.5 w-3.5" />
+                Claim Gold
+              </Button>
+            </div>
+          )}
+
+          {/* Analytics Dashboard — admin only */}
+          {isAdmin && (
+            <div
+              className="mx-4 mb-4 rounded-xl p-4"
+              style={{
+                background: "oklch(0.14 0.03 260 / 0.6)",
+                border: "1px solid oklch(0.82 0.15 72 / 0.2)",
+              }}
+              data-ocid="wallet.analytics.panel"
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <BarChart3
+                  className="h-4 w-4"
+                  style={{ color: "oklch(0.82 0.15 72)" }}
+                />
+                <span
+                  className="text-sm font-semibold"
+                  style={{ color: "oklch(0.82 0.15 72)" }}
+                >
+                  Analytics
+                </span>
+              </div>
+              {analyticsLoading ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <Skeleton key={i} className="h-16 w-full rounded-xl" />
+                  ))}
+                </div>
+              ) : analytics === null || analytics === undefined ? (
+                <p className="text-xs text-muted-foreground text-center py-4">
+                  Analytics unavailable
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {(
+                    [
+                      {
+                        label: "Total Users",
+                        value: Number(analytics.totalUsers).toLocaleString(),
+                        ocid: "wallet.analytics.total_users",
+                      },
+                      {
+                        label: "Messages Sent",
+                        value: Number(
+                          analytics.totalMessagesSent,
+                        ).toLocaleString(),
+                        ocid: "wallet.analytics.messages_sent",
+                      },
+                      {
+                        label: "Gold Volume",
+                        value: `${GOLD_SYMBOL} ${(Number(analytics.totalGoldVolume) / 100).toFixed(2)}`,
+                        ocid: "wallet.analytics.gold_volume",
+                      },
+                      {
+                        label: "Active Users",
+                        value: Number(analytics.activeUsers).toLocaleString(),
+                        ocid: "wallet.analytics.active_users",
+                      },
+                      {
+                        label: "Channels",
+                        value: Number(
+                          analytics.channelsCreated,
+                        ).toLocaleString(),
+                        ocid: "wallet.analytics.channels_created",
+                      },
+                      {
+                        label: "Stories Posted",
+                        value: Number(analytics.storiesPosted).toLocaleString(),
+                        ocid: "wallet.analytics.stories_posted",
+                      },
+                    ] as const
+                  ).map((stat) => (
+                    <div
+                      key={stat.label}
+                      className="rounded-xl p-3 flex flex-col gap-1"
+                      style={{
+                        background: "oklch(0.18 0.04 60 / 0.5)",
+                        border: "1px solid oklch(0.82 0.15 72 / 0.1)",
+                      }}
+                      data-ocid={stat.ocid}
+                    >
+                      <span className="text-xs text-muted-foreground leading-tight">
+                        {stat.label}
+                      </span>
+                      <span
+                        className="text-lg font-bold font-display leading-none truncate"
+                        style={{ color: "oklch(0.82 0.15 72)" }}
+                      >
+                        {stat.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

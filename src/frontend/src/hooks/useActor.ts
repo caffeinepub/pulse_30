@@ -1,23 +1,14 @@
-import {
-  createActorWithConfig,
-  useActor as useCoreActor,
-} from "@caffeineai/core-infrastructure";
+// Project-level useActor wrapper.
+// Binds the infrastructure's generic useActor to this project's createActor function.
+import { useActor as useActorBase } from "@caffeineai/core-infrastructure";
 import type { Backend } from "../backend";
 import { createActor } from "../backend";
 
-// Pre-bind createActor so callers don't need to pass it
-const boundCreateActor = (
-  canisterId: string,
-  uploadFile: Parameters<typeof createActor>[1],
-  downloadFile: Parameters<typeof createActor>[2],
-  options: Parameters<typeof createActor>[3],
-) => createActor(canisterId, uploadFile, downloadFile, options);
-
+// Re-export typed actor hook so callers can `import { useActor } from "./useActor"`
+// and get back `{ actor: Backend | null, isFetching: boolean }`.
 export function useActor(): { actor: Backend | null; isFetching: boolean } {
-  return useCoreActor(boundCreateActor) as {
+  return useActorBase(createActor) as {
     actor: Backend | null;
     isFetching: boolean;
   };
 }
-
-export { createActorWithConfig };

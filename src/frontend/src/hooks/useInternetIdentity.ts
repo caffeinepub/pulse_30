@@ -1,6 +1,2 @@
-export {
-  useInternetIdentity,
-  InternetIdentityProvider,
-  type InternetIdentityContext,
-  type Status,
-} from "@caffeineai/core-infrastructure";
+// Project-level useInternetIdentity re-export from @caffeineai/core-infrastructure
+export { useInternetIdentity } from "@caffeineai/core-infrastructure";

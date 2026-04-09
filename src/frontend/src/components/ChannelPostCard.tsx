@@ -25,10 +25,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Bookmark,
-  BookmarkCheck,
   Edit,
-  Eye,
   Heart,
   Loader2,
   MessageCircle,
@@ -40,15 +37,11 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
-  useBookmarkPost,
   useCommentOnChannelPost,
   useDeleteChannelPost,
   useEditChannelPost,
   useGetChannelPostInteractions,
-  useGetChannelPostViewCount,
   useLikeChannelPost,
-  useRecordChannelPostView,
-  useUnbookmarkPost,
   useUnlikeChannelPost,
 } from "../hooks/useQueries";
 import type {
@@ -236,7 +229,6 @@ interface ChannelPostCardProps {
   currentUserId: string;
   channelId: ChannelId;
   index: number;
-  isBookmarked?: boolean;
 }
 
 export default function ChannelPostCard({
@@ -248,7 +240,6 @@ export default function ChannelPostCard({
   currentUserId,
   channelId,
   index,
-  isBookmarked = false,
 }: ChannelPostCardProps) {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -257,7 +248,6 @@ export default function ChannelPostCard({
   const [editText, setEditText] = useState(post.content.text);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [showFullText, setShowFullText] = useState(false);
-  const [bookmarked, setBookmarked] = useState(isBookmarked);
 
   const { data: interactions } = useGetChannelPostInteractions(post.id);
   const likePost = useLikeChannelPost();
@@ -265,16 +255,6 @@ export default function ChannelPostCard({
   const commentOnPost = useCommentOnChannelPost();
   const deletePost = useDeleteChannelPost(channelId);
   const editPost = useEditChannelPost(channelId);
-  const bookmarkPost = useBookmarkPost();
-  const unbookmarkPost = useUnbookmarkPost();
-  const recordView = useRecordChannelPostView();
-  const { data: viewCount = 0 } = useGetChannelPostViewCount(post.id);
-
-  // Record view once when post is first rendered
-  // biome-ignore lint/correctness/useExhaustiveDependencies: record once per post mount
-  useEffect(() => {
-    recordView.mutate(post.id);
-  }, [post.id]);
 
   const likeCount = Number(interactions?.likeCount ?? 0);
   const likedByMe = interactions?.likedByMe ?? false;
@@ -285,26 +265,6 @@ export default function ChannelPostCard({
       unlikePost.mutate(post.id);
     } else {
       likePost.mutate(post.id);
-    }
-  };
-
-  const handleBookmark = () => {
-    if (bookmarked) {
-      unbookmarkPost.mutate(post.id, {
-        onSuccess: () => {
-          setBookmarked(false);
-          toast.success("Removed from bookmarks");
-        },
-        onError: () => toast.error("Failed to remove bookmark"),
-      });
-    } else {
-      bookmarkPost.mutate(post.id, {
-        onSuccess: () => {
-          setBookmarked(true);
-          toast.success("Bookmarked!");
-        },
-        onError: () => toast.error("Failed to bookmark post"),
-      });
     }
   };
 
@@ -556,37 +516,6 @@ export default function ChannelPostCard({
           aria-label="Forward"
         >
           <Share2 className="h-4 w-4 text-muted-foreground" />
-        </button>
-
-        {/* View count — visible to all users */}
-        {viewCount > 0 && (
-          <div
-            className="flex items-center gap-1 px-2 py-1.5"
-            data-ocid={`channel.post.view_count.${ocid}`}
-          >
-            <Eye className="h-3.5 w-3.5 text-muted-foreground/60" />
-            <span className="text-xs text-muted-foreground/60">
-              {viewCount}
-            </span>
-          </div>
-        )}
-
-        <button
-          type="button"
-          data-ocid={`channel.post.bookmark_button.${ocid}`}
-          onClick={handleBookmark}
-          disabled={bookmarkPost.isPending || unbookmarkPost.isPending}
-          className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-muted/50 transition-colors ml-auto disabled:opacity-40"
-          aria-label={bookmarked ? "Remove bookmark" : "Bookmark"}
-        >
-          {bookmarked ? (
-            <BookmarkCheck
-              className="h-4 w-4"
-              style={{ color: "oklch(0.82 0.15 72)" }}
-            />
-          ) : (
-            <Bookmark className="h-4 w-4 text-muted-foreground" />
-          )}
         </button>
       </div>
 
